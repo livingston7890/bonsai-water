@@ -151,42 +151,42 @@ def master_dashboard_html() -> str:
 
   <div class="master-kpi-grid">
     <div class="card master-kpi-card">
-      <div class="master-kpi-label">Soil Moisture</div>
+      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">water_drop</span>Soil Moisture</div>
       <div id="masterMoistureKpi" class="master-kpi-value">--</div>
       <div id="masterMoistureState" class="master-kpi-sub muted">No data yet</div>
     </div>
     <div class="card master-kpi-card">
-      <div class="master-kpi-label">Pump</div>
+      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">bolt</span>Pump</div>
       <div id="masterPumpKpi" class="master-kpi-value">--</div>
       <div id="masterPumpMeta" class="master-kpi-sub muted">No data yet</div>
     </div>
     <div class="card master-kpi-card">
-      <div class="master-kpi-label">Auto Watering</div>
+      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">water_drop</span>Auto Watering</div>
       <div id="masterAutoWaterKpi" class="master-kpi-value">--</div>
       <div id="masterLastWatered" class="master-kpi-sub muted">Last: --</div>
     </div>
     <div class="card master-kpi-card">
-      <div class="master-kpi-label">Lamps</div>
+      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamps</div>
       <div id="masterLampKpi" class="master-kpi-value">--</div>
       <div id="masterLampMeta" class="master-kpi-sub muted">Preset: --</div>
     </div>
     <div class="card master-kpi-card">
-      <div class="master-kpi-label">Speakers</div>
+      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">speaker</span>Speakers</div>
       <div id="masterSpeakerKpi" class="master-kpi-value">--</div>
       <div id="masterSpeakerMeta" class="master-kpi-sub muted">No data yet</div>
     </div>
     <div class="card master-kpi-card">
-      <div class="master-kpi-label">DNS Blocking</div>
+      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">shield</span>DNS Blocking</div>
       <div id="masterDnsKpi" class="master-kpi-value">--</div>
       <div id="masterDnsMeta" class="master-kpi-sub muted">No data yet</div>
     </div>
     <div class="card master-kpi-card">
-      <div class="master-kpi-label">Queries Today</div>
+      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">query_stats</span>Queries Today</div>
       <div id="masterQueriesKpi" class="master-kpi-value">--</div>
       <div class="master-kpi-sub muted">Pi-hole</div>
     </div>
     <div class="card master-kpi-card">
-      <div class="master-kpi-label">Blocked %</div>
+      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">percent</span>Blocked %</div>
       <div id="masterBlockedPctKpi" class="master-kpi-value">--</div>
       <div id="masterBlockedCountMeta" class="master-kpi-sub muted">Blocked: --</div>
     </div>
@@ -194,58 +194,58 @@ def master_dashboard_html() -> str:
 
   <div class="master-detail-grid">
     <div class="card master-detail-card">
-      <div class="panel-title">Home Assistant</div>
+      <div class="panel-title"><span class="material-symbols-rounded label-icon">home</span>Home Assistant</div>
       <div class="master-list">
         <div class="master-item">
-          <span>Connection</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">link</span>Connection</span>
           <span id="masterHaConnection" class="status-pill status-warn">Pending</span>
         </div>
         <div class="master-item">
-          <span>Smart plug</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">power_settings_new</span>Smart plug</span>
           <span id="masterHaPlug" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Main light</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">lightbulb</span>Main light</span>
           <span id="masterHaLight" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Speaker left</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">speaker</span>Speaker left</span>
           <span id="masterHaSpeakerLeft" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Speaker right</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">speaker</span>Speaker right</span>
           <span id="masterHaSpeakerRight" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Lamp left</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">lightbulb</span>Lamp left</span>
           <span id="masterHaLampLeft" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Lamp right</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">lightbulb</span>Lamp right</span>
           <span id="masterHaLampRight" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Dimmer</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">tune</span>Dimmer</span>
           <span id="masterHaDimmer" class="master-state neutral">--</span>
         </div>
       </div>
       <div class="master-controls">
         <div class="master-control-group">
-          <span class="master-control-label">Speakers</span>
+          <span class="master-control-label"><span class="material-symbols-rounded label-icon">speaker</span>Speakers</span>
           <button id="masterHaSpeakersToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleHaSpeakers()">--</button>
         </div>
         <div class="master-control-group">
-          <span class="master-control-label">Lamps</span>
+          <span class="master-control-label"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamps</span>
           <button id="masterHaLampsToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleHaLamps()">--</button>
         </div>
         <div class="master-control-group">
-          <span class="master-control-label">Lamp colors</span>
+          <span class="master-control-label"><span class="material-symbols-rounded label-icon">palette</span>Lamp colors</span>
           <button class="btn master-mini-btn preset-btn preset-cool" onclick="masterSetHaLampPalette('cool')">COOL</button>
           <button class="btn master-mini-btn preset-btn preset-warm" onclick="masterSetHaLampPalette('warm')">WARM</button>
           <button class="btn master-mini-btn preset-btn preset-candle" onclick="masterSetHaLampPalette('candle')">CANDLE</button>
         </div>
         <div class="master-control-group">
-          <span class="master-control-label">Dimmer</span>
+          <span class="master-control-label"><span class="material-symbols-rounded label-icon">tune</span>Dimmer</span>
           <input id="masterLampDimmer" type="range" min="1" max="100" step="1" value="80" oninput="masterLampDimmerInputChanged()">
           <span id="masterLampDimmerValue" class="status-pill status-warn">80%</span>
           <button class="btn master-mini-btn" onclick="masterApplyHaLampBrightness()">APPLY</button>
@@ -254,96 +254,96 @@ def master_dashboard_html() -> str:
     </div>
 
     <div class="card master-detail-card">
-      <div class="panel-title">Bonsai</div>
+      <div class="panel-title"><span class="material-symbols-rounded label-icon">eco</span>Bonsai</div>
       <div class="master-list">
         <div class="master-item">
-          <span>Soil moisture</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">water_drop</span>Soil moisture</span>
           <span id="masterBonsaiMoisture" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Moisture state</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">water_drop</span>Moisture state</span>
           <span id="masterBonsaiState" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Pump mode</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">bolt</span>Pump mode</span>
           <span id="masterBonsaiPumpMode" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Pump remaining</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">hourglass_top</span>Pump remaining</span>
           <span id="masterBonsaiPumpRemaining" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Auto watering</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">water_drop</span>Auto watering</span>
           <span id="masterBonsaiAuto" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>OLED</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">view_in_ar</span>OLED</span>
           <span id="masterBonsaiOled" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>GPIO</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">memory</span>GPIO</span>
           <span id="masterBonsaiGpio" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Thresholds</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">tune</span>Thresholds</span>
           <span id="masterBonsaiThresholds" class="master-state neutral">--</span>
         </div>
       </div>
       <div class="master-controls">
         <div class="master-control-group">
-          <span class="master-control-label">Auto Watering</span>
+          <span class="master-control-label"><span class="material-symbols-rounded label-icon">water_drop</span>Auto Watering</span>
           <button id="masterBonsaiAutoToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleBonsaiAuto()">--</button>
         </div>
         <div class="master-control-group">
-          <span class="master-control-label">Manual Pump</span>
+          <span class="master-control-label"><span class="material-symbols-rounded label-icon">play_circle</span>Manual Pump</span>
           <button id="masterBonsaiManualToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleBonsaiManual()">--</button>
         </div>
         <div class="master-control-group">
-          <span class="master-control-label">OLED</span>
+          <span class="master-control-label"><span class="material-symbols-rounded label-icon">view_in_ar</span>OLED</span>
           <button id="masterBonsaiOledToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleBonsaiOled()">--</button>
         </div>
       </div>
     </div>
 
     <div class="card master-detail-card">
-      <div class="panel-title">Pi-hole</div>
+      <div class="panel-title"><span class="material-symbols-rounded label-icon">dns</span>Pi-hole</div>
       <div class="master-list">
         <div class="master-item">
-          <span>Connection</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">link</span>Connection</span>
           <span id="masterPiholeConnection" class="status-pill status-warn">Pending</span>
         </div>
         <div class="master-item">
-          <span>Mode</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">settings</span>Mode</span>
           <span id="masterPiholeMode" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Blocking</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">shield</span>Blocking</span>
           <span id="masterPiholeBlocking" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Queries today</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">query_stats</span>Queries today</span>
           <span id="masterPiholeQueries" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Blocked today</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">block</span>Blocked today</span>
           <span id="masterPiholeBlocked" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Blocked percent</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">percent</span>Blocked percent</span>
           <span id="masterPiholePercent" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>TLS verify</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">lock</span>TLS verify</span>
           <span id="masterPiholeTls" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span>Message</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">chat</span>Message</span>
           <span id="masterPiholeMsg" class="master-msg muted">--</span>
         </div>
       </div>
       <div class="master-controls">
         <div class="master-control-group">
-          <span class="master-control-label">DNS Blocking</span>
+          <span class="master-control-label"><span class="material-symbols-rounded label-icon">shield</span>DNS Blocking</span>
           <button id="masterPiholeBlockingToggleBtn" class="btn master-mini-btn state-action" onclick="masterTogglePiholeBlocking()">--</button>
         </div>
       </div>
@@ -1129,27 +1129,6 @@ def create_app(plugins: list[Any]) -> Flask:
             )
         )
 
-        settings_pane_id = "pane-settings"
-        settings_meta = MODULE_META.get("settings", {"tag": "SET", "hint": "Updater and hub controls", "icon": "settings"})
-        nav_items.append(
-            render_module_nav_item(
-                pane_id=settings_pane_id,
-                module_name="Settings",
-                module_meta=settings_meta,
-                active=False,
-                module_key="settings",
-            )
-        )
-        plugin_panes.append(
-            render_module_pane(
-                pane_id=settings_pane_id,
-                module_name="Settings",
-                module_meta=settings_meta,
-                module_html=settings_dashboard_html(),
-                active=False,
-            )
-        )
-
         for plugin in plugins:
             plugin_id = safe_plugin_key(getattr(plugin, "plugin_id", plugin.__class__.__name__))
             plugin_name = str(getattr(plugin, "display_name", plugin.__class__.__name__))
@@ -1174,8 +1153,26 @@ def create_app(plugins: list[Any]) -> Flask:
                 )
             )
 
-        hotkeys = " / ".join(f"Alt+{idx}" for idx in range(1, len(nav_items) + 1))
-        module_tip_text = f"Tip: {hotkeys} to switch modules quickly."
+        settings_pane_id = "pane-settings"
+        settings_meta = MODULE_META.get("settings", {"tag": "SET", "hint": "Updater and hub controls", "icon": "settings"})
+        nav_items.append(
+            render_module_nav_item(
+                pane_id=settings_pane_id,
+                module_name="Settings",
+                module_meta=settings_meta,
+                active=False,
+                module_key="settings",
+            )
+        )
+        plugin_panes.append(
+            render_module_pane(
+                pane_id=settings_pane_id,
+                module_name="Settings",
+                module_meta=settings_meta,
+                module_html=settings_dashboard_html(),
+                active=False,
+            )
+        )
 
         plugin_nav_html = "\n".join(nav_items)
         plugin_html = "\n".join(plugin_panes)
@@ -1339,12 +1336,6 @@ def create_app(plugins: list[Any]) -> Flask:
       letter-spacing: 0.1em;
       color: var(--sub);
       text-transform: uppercase;
-    }
-    .side-tip {
-      margin: 12px 6px 4px;
-      font-size: 13px;
-      color: var(--sub);
-      line-height: 1.35;
     }
     .side-link {
       --module-bg-a: rgba(76, 96, 142, 0.14);
@@ -1552,6 +1543,16 @@ def create_app(plugins: list[Any]) -> Flask:
       letter-spacing: 0.01em;
       margin-bottom: 9px;
     }
+    .label-icon {
+      font-size: 16px;
+      color: var(--sub);
+      vertical-align: -2px;
+      margin-right: 5px;
+    }
+    .panel-title .label-icon {
+      color: var(--primary);
+      margin-right: 7px;
+    }
     .panel-title-row {
       display: flex;
       align-items: center;
@@ -1758,6 +1759,16 @@ def create_app(plugins: list[Any]) -> Flask:
       font-size: 12.5px;
       line-height: 1.2;
     }
+    .master-item-name {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .master-item-name .material-symbols-rounded {
+      font-size: 16px;
+      color: var(--sub);
+    }
     html[data-theme='light'] .master-item {
       background: linear-gradient(150deg, rgba(232, 240, 255, 0.82), rgba(225, 235, 250, 0.65));
       border-color: rgba(82, 102, 145, 0.14);
@@ -1860,8 +1871,7 @@ def create_app(plugins: list[Any]) -> Flask:
         align-items: stretch;
         gap: 8px;
       }
-      .side-head,
-      .side-tip {
+      .side-head {
         width: 100%;
       }
       .side-link {
@@ -1923,7 +1933,6 @@ def create_app(plugins: list[Any]) -> Flask:
     <aside class=\"sidebar\">
       <div class=\"side-head\">Modules</div>
       {{ plugin_nav_html|safe }}
-      <div class=\"side-tip\">{{ module_tip_text }}</div>
     </aside>
     <main>
       {{ plugin_html|safe }}
@@ -2186,7 +2195,6 @@ async function updateHubModules(alreadyPrompted=false) {
             html,
             plugin_html=plugin_html,
             plugin_nav_html=plugin_nav_html,
-            module_tip_text=module_tip_text,
             plugin_js=plugin_js,
             plugin_init=plugin_init,
         )

@@ -413,17 +413,17 @@ class PiholePlugin:
     </div>
 
     <div class="row" style="margin-top:10px;">
-      <label><input id="piholeEnabled" class="switch" type="checkbox"> Enable Pi-hole integration</label>
-      <label><input id="piholeVerifyTls" class="switch" type="checkbox"> Verify TLS cert</label>
+      <label><input id="piholeEnabled" class="switch" type="checkbox"> <span class="material-symbols-rounded label-icon">dns</span>Enable Pi-hole integration</label>
+      <label><input id="piholeVerifyTls" class="switch" type="checkbox"> <span class="material-symbols-rounded label-icon">lock</span>Verify TLS cert</label>
     </div>
 
     <div class="grid" style="margin-top:12px;">
       <div>
-        <div class="small muted">Pi-hole base URL</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">link</span>Pi-hole base URL</div>
         <input id="piholeBaseUrl" class="wide" type="text" placeholder="http://pi.hole">
       </div>
       <div>
-        <div class="small muted">Mode</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">settings</span>Mode</div>
         <select id="piholeMode" class="wide">
           <option value="auto">auto (try v6, then legacy)</option>
           <option value="v6">v6 API (session auth)</option>
@@ -431,11 +431,11 @@ class PiholePlugin:
         </select>
       </div>
       <div>
-        <div class="small muted">Pi-hole password / app password (v6)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">password</span>Pi-hole password / app password (v6)</div>
         <input id="piholePassword" class="wide" type="password" placeholder="Leave blank to keep current">
       </div>
       <div>
-        <div class="small muted">Legacy API token (optional)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">key</span>Legacy API token (optional)</div>
         <input id="piholeToken" class="wide" type="password" placeholder="Leave blank to keep current">
       </div>
     </div>
@@ -447,22 +447,22 @@ class PiholePlugin:
     </div>
 
     <div class="row" style="margin-top:12px;">
-      <span class="small muted">DNS Blocking:</span>
+      <span class="small muted"><span class="material-symbols-rounded label-icon">shield</span>DNS Blocking:</span>
       <button id="piholeBlockingBtn" class="btn control-btn" onclick="piholeToggleBlocking()">Loading...</button>
       <span id="piholeBlockingState" class="small muted">n/a</span>
     </div>
 
     <div class="grid" style="margin-top:12px;">
       <div class="card sub-card" style="margin:0;">
-        <div class="small muted">Queries Today</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">query_stats</span>Queries Today</div>
         <div id="piholeQueries" style="font-size:24px;font-weight:800;">--</div>
       </div>
       <div class="card sub-card" style="margin:0;">
-        <div class="small muted">Blocked Today</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">block</span>Blocked Today</div>
         <div id="piholeBlocked" style="font-size:24px;font-weight:800;">--</div>
       </div>
       <div class="card sub-card" style="margin:0;">
-        <div class="small muted">Blocked %</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">percent</span>Blocked %</div>
         <div id="piholePercent" style="font-size:24px;font-weight:800;">--</div>
       </div>
     </div>

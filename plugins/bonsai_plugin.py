@@ -572,7 +572,7 @@ class BonsaiPlugin:
         <div id="bonsaiStateText" class="small muted">Loading...</div>
       </div>
       <div>
-        <div class="small muted">Pump</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">bolt</span>Pump</div>
         <div id="bonsaiPumpState" style="font-size:22px;font-weight:800;">OFF</div>
         <div id="bonsaiPumpMeta" class="small muted"></div>
       </div>
@@ -581,7 +581,7 @@ class BonsaiPlugin:
 
   <div class="card">
     <div class="row">
-      <span class="panel-title" style="margin-bottom:0;">Auto Watering</span>
+      <span class="panel-title" style="margin-bottom:0;"><span class="material-symbols-rounded label-icon">water_drop</span>Auto Watering</span>
       <button id="bonsaiAutoBtn" class="btn control-btn" onclick="bonsaiToggleAuto()">Loading...</button>
       <span id="bonsaiAutoMsg" class="small muted"></span>
     </div>
@@ -590,7 +590,7 @@ class BonsaiPlugin:
 
   <div class="card">
     <div class="row">
-      <span class="panel-title" style="margin-bottom:0;">Manual Pump Run</span>
+      <span class="panel-title" style="margin-bottom:0;"><span class="material-symbols-rounded label-icon">play_circle</span>Manual Pump Run</span>
       <button id="bonsaiManualBtn" class="btn control-btn" onclick="bonsaiToggleManual()">Loading...</button>
       <span class="small muted">Stops on toggle-off or at 30s safety max.</span>
     </div>
@@ -599,7 +599,7 @@ class BonsaiPlugin:
 
   <div class="card">
     <div class="row">
-      <span class="panel-title" style="margin-bottom:0;">OLED Display</span>
+      <span class="panel-title" style="margin-bottom:0;"><span class="material-symbols-rounded label-icon">view_in_ar</span>OLED Display</span>
       <button id="bonsaiOledBtn" class="btn control-btn" onclick="bonsaiToggleOled()">Loading...</button>
       <span id="bonsaiOledMsg" class="small muted"></span>
     </div>
@@ -607,26 +607,26 @@ class BonsaiPlugin:
   </div>
 
   <div class="card">
-    <div class="panel-title">Thresholds & Timing</div>
+    <div class="panel-title"><span class="material-symbols-rounded label-icon">tune</span>Thresholds & Timing</div>
     <div class="grid">
       <div>
-        <div class="small muted">Low threshold (%)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">south</span>Low threshold (%)</div>
         <input id="bonsaiLow" type="number" min="5" max="95">
       </div>
       <div>
-        <div class="small muted">High threshold (%)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">north</span>High threshold (%)</div>
         <input id="bonsaiHigh" type="number" min="5" max="95">
       </div>
       <div>
-        <div class="small muted">Auto run duration (s)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">timer</span>Auto run duration (s)</div>
         <input id="bonsaiDur" type="number" min="1" max="300">
       </div>
       <div>
-        <div class="small muted">Min interval (s)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">schedule</span>Min interval (s)</div>
         <input id="bonsaiIntv" type="number" min="60" max="86400">
       </div>
       <div>
-        <div class="small muted">Read interval (s)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">sensors</span>Read interval (s)</div>
         <input id="bonsaiReadi" type="number" min="30" max="3600">
       </div>
     </div>
@@ -637,7 +637,7 @@ class BonsaiPlugin:
   </div>
 
   <div class="card">
-    <div class="panel-title" style="margin-bottom:8px;">Recent Waterings</div>
+    <div class="panel-title" style="margin-bottom:8px;"><span class="material-symbols-rounded label-icon">history</span>Recent Waterings</div>
     <div id="bonsaiWaterings" class="small mono muted">Loading...</div>
   </div>
 """

@@ -446,52 +446,52 @@ class HomeAssistantPlugin:
   </div>
 
   <div class="card">
-    <div class="panel-title">Speakers</div>
+    <div class="panel-title"><span class="material-symbols-rounded label-icon">speaker</span>Speakers</div>
     <div class="row" style="margin-top:8px;">
-      <span class="small muted">Speaker L:</span>
+      <span class="small muted"><span class="material-symbols-rounded label-icon">speaker</span>Speaker L:</span>
       <button class="btn control-btn" onclick="haSetSpeaker('left', true)">ON</button>
       <button class="btn gray control-btn" onclick="haSetSpeaker('left', false)">OFF</button>
       <span id="haSpeakerLeftState" class="small muted">n/a</span>
     </div>
 
     <div class="row" style="margin-top:8px;">
-      <span class="small muted">Speaker R:</span>
+      <span class="small muted"><span class="material-symbols-rounded label-icon">speaker</span>Speaker R:</span>
       <button class="btn control-btn" onclick="haSetSpeaker('right', true)">ON</button>
       <button class="btn gray control-btn" onclick="haSetSpeaker('right', false)">OFF</button>
       <span id="haSpeakerRightState" class="small muted">n/a</span>
     </div>
 
     <div class="row" style="margin-top:8px;">
-      <span class="small muted">Both speakers:</span>
+      <span class="small muted"><span class="material-symbols-rounded label-icon">surround_sound</span>Both speakers:</span>
       <button id="haBothSpeakersBtn" class="btn control-btn" onclick="haToggleBothSpeakers()">Toggle</button>
       <span id="haBothSpeakersState" class="small muted">n/a</span>
     </div>
   </div>
 
   <div class="card">
-    <div class="panel-title">Lamps, Scenes, and Dimmer</div>
+    <div class="panel-title"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamps, Scenes, and Dimmer</div>
     <div class="row" style="margin-top:8px;">
-      <span class="small muted">Lamp L:</span>
+      <span class="small muted"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamp L:</span>
       <button class="btn control-btn" onclick="haSetLamp('left', true)">ON</button>
       <button class="btn gray control-btn" onclick="haSetLamp('left', false)">OFF</button>
       <span id="haLampLeftState" class="small muted">n/a</span>
     </div>
 
     <div class="row" style="margin-top:8px;">
-      <span class="small muted">Lamp R:</span>
+      <span class="small muted"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamp R:</span>
       <button class="btn control-btn" onclick="haSetLamp('right', true)">ON</button>
       <button class="btn gray control-btn" onclick="haSetLamp('right', false)">OFF</button>
       <span id="haLampRightState" class="small muted">n/a</span>
     </div>
 
     <div class="row" style="margin-top:8px;">
-      <span class="small muted">Both lamps:</span>
+      <span class="small muted"><span class="material-symbols-rounded label-icon">wb_incandescent</span>Both lamps:</span>
       <button id="haBothLampsBtn" class="btn control-btn" onclick="haToggleBothLamps()">Toggle</button>
       <span id="haBothLampsState" class="small muted">n/a</span>
     </div>
 
     <div class="row" style="margin-top:12px;">
-      <span class="small muted">Lamp colors:</span>
+      <span class="small muted"><span class="material-symbols-rounded label-icon">palette</span>Lamp colors:</span>
       <button
         class="btn control-btn preset-btn preset-cool"
         onclick="haSetLampPalette('cool')"
@@ -509,7 +509,7 @@ class HomeAssistantPlugin:
     <div id="haLampPaletteLast" class="small muted" style="margin-top:6px;"></div>
 
     <div class="row" style="margin-top:12px; align-items:center;">
-      <span class="small muted">Dimmer:</span>
+      <span class="small muted"><span class="material-symbols-rounded label-icon">tune</span>Dimmer:</span>
       <input id="haLampDimmer" type="range" min="1" max="100" step="1" value="80" oninput="haLampDimmerInputChanged()">
       <span id="haLampDimmerValue" class="status-pill status-warn">80%</span>
       <button class="btn control-btn" onclick="haApplyLampBrightness()">Apply Dimmer</button>
@@ -518,38 +518,38 @@ class HomeAssistantPlugin:
   </div>
 
   <div class="card">
-    <div class="panel-title">Connection & Entities</div>
+    <div class="panel-title"><span class="material-symbols-rounded label-icon">settings_ethernet</span>Connection & Entities</div>
     <div class="grid">
       <div>
-        <div class="small muted">HA base URL</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">link</span>HA base URL</div>
         <input id="haBaseUrl" class="wide" type="text" placeholder="http://homeassistant.local:8123">
       </div>
       <div>
-        <div class="small muted">Long-lived access token</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">key</span>Long-lived access token</div>
         <input id="haToken" class="wide" type="password" placeholder="Paste token (leave blank to keep current)">
       </div>
       <div>
-        <div class="small muted">Smart plug entity</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">power_settings_new</span>Smart plug entity</div>
         <input id="haSwitchEntity" class="wide" type="text" placeholder="switch.office_plug">
       </div>
       <div>
-        <div class="small muted">Smart light entity</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">lightbulb</span>Smart light entity</div>
         <input id="haLightEntity" class="wide" type="text" placeholder="light.desk_lamp">
       </div>
       <div>
-        <div class="small muted">Speaker left plug entity</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">speaker</span>Speaker left plug entity</div>
         <input id="haSpeakerLeftEntity" class="wide" type="text" placeholder="switch.speaker_left">
       </div>
       <div>
-        <div class="small muted">Speaker right plug entity</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">speaker</span>Speaker right plug entity</div>
         <input id="haSpeakerRightEntity" class="wide" type="text" placeholder="switch.speaker_right">
       </div>
       <div>
-        <div class="small muted">Floor lamp left entity</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">light</span>Floor lamp left entity</div>
         <input id="haLampLeftEntity" class="wide" type="text" placeholder="light.floor_lamp_left">
       </div>
       <div>
-        <div class="small muted">Floor lamp right entity</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">light</span>Floor lamp right entity</div>
         <input id="haLampRightEntity" class="wide" type="text" placeholder="light.floor_lamp_right">
       </div>
     </div>
