@@ -446,50 +446,6 @@ class HomeAssistantPlugin:
   </div>
 
   <div class="card">
-    <div class="panel-title">Connection & Entities</div>
-    <div class="grid">
-      <div>
-        <div class="small muted">HA base URL</div>
-        <input id="haBaseUrl" class="wide" type="text" placeholder="http://homeassistant.local:8123">
-      </div>
-      <div>
-        <div class="small muted">Long-lived access token</div>
-        <input id="haToken" class="wide" type="password" placeholder="Paste token (leave blank to keep current)">
-      </div>
-      <div>
-        <div class="small muted">Smart plug entity</div>
-        <input id="haSwitchEntity" class="wide" type="text" placeholder="switch.office_plug">
-      </div>
-      <div>
-        <div class="small muted">Smart light entity</div>
-        <input id="haLightEntity" class="wide" type="text" placeholder="light.desk_lamp">
-      </div>
-      <div>
-        <div class="small muted">Speaker left plug entity</div>
-        <input id="haSpeakerLeftEntity" class="wide" type="text" placeholder="switch.speaker_left">
-      </div>
-      <div>
-        <div class="small muted">Speaker right plug entity</div>
-        <input id="haSpeakerRightEntity" class="wide" type="text" placeholder="switch.speaker_right">
-      </div>
-      <div>
-        <div class="small muted">Floor lamp left entity</div>
-        <input id="haLampLeftEntity" class="wide" type="text" placeholder="light.floor_lamp_left">
-      </div>
-      <div>
-        <div class="small muted">Floor lamp right entity</div>
-        <input id="haLampRightEntity" class="wide" type="text" placeholder="light.floor_lamp_right">
-      </div>
-    </div>
-
-    <div class="row" style="margin-top:12px;">
-      <button class="btn" onclick="haSaveConfig()">Save HA Settings</button>
-      <button class="btn gray" onclick="haRefreshStatus()">Refresh HA</button>
-      <span id="haSaveMsg" class="small muted"></span>
-    </div>
-  </div>
-
-  <div class="card">
     <div class="panel-title">Speakers</div>
     <div class="row" style="margin-top:8px;">
       <span class="small muted">Speaker L:</span>
@@ -559,6 +515,50 @@ class HomeAssistantPlugin:
       <button class="btn control-btn" onclick="haApplyLampBrightness()">Apply Dimmer</button>
     </div>
     <div id="haLampDimmerMsg" class="small muted" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="panel-title">Connection & Entities</div>
+    <div class="grid">
+      <div>
+        <div class="small muted">HA base URL</div>
+        <input id="haBaseUrl" class="wide" type="text" placeholder="http://homeassistant.local:8123">
+      </div>
+      <div>
+        <div class="small muted">Long-lived access token</div>
+        <input id="haToken" class="wide" type="password" placeholder="Paste token (leave blank to keep current)">
+      </div>
+      <div>
+        <div class="small muted">Smart plug entity</div>
+        <input id="haSwitchEntity" class="wide" type="text" placeholder="switch.office_plug">
+      </div>
+      <div>
+        <div class="small muted">Smart light entity</div>
+        <input id="haLightEntity" class="wide" type="text" placeholder="light.desk_lamp">
+      </div>
+      <div>
+        <div class="small muted">Speaker left plug entity</div>
+        <input id="haSpeakerLeftEntity" class="wide" type="text" placeholder="switch.speaker_left">
+      </div>
+      <div>
+        <div class="small muted">Speaker right plug entity</div>
+        <input id="haSpeakerRightEntity" class="wide" type="text" placeholder="switch.speaker_right">
+      </div>
+      <div>
+        <div class="small muted">Floor lamp left entity</div>
+        <input id="haLampLeftEntity" class="wide" type="text" placeholder="light.floor_lamp_left">
+      </div>
+      <div>
+        <div class="small muted">Floor lamp right entity</div>
+        <input id="haLampRightEntity" class="wide" type="text" placeholder="light.floor_lamp_right">
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px;">
+      <button class="btn" onclick="haSaveConfig()">Save HA Settings</button>
+      <button class="btn gray" onclick="haRefreshStatus()">Refresh HA</button>
+      <span id="haSaveMsg" class="small muted"></span>
+    </div>
   </div>
 """
 

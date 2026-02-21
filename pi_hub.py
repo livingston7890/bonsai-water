@@ -34,6 +34,7 @@ DEFAULT_PLUGIN_MODULES = [
 
 MODULE_META = {
     "master": {"tag": "MASTER", "hint": "Unified read-only overview", "icon": "dashboard"},
+    "settings": {"tag": "SET", "hint": "Updater and hub controls", "icon": "settings"},
     "home_assistant": {"tag": "HA", "hint": "Lights, speakers, scenes", "icon": "home"},
     "bonsai": {"tag": "BONSAI", "hint": "Moisture, pump, OLED", "icon": "eco"},
     "pihole": {"tag": "DNS", "hint": "Blocking status and controls", "icon": "dns"},
@@ -135,7 +136,10 @@ def master_dashboard_html() -> str:
         <span class="material-symbols-rounded panel-title-icon">monitoring</span>
         <div class="panel-title" style="margin-bottom:0;">Whole-System Snapshot</div>
       </div>
-      <span id="masterUpdated" class="small muted">Waiting for first refresh...</span>
+      <div class="row" style="gap:8px; justify-content:flex-end;">
+        <span id="hubPiLink" class="status-pill status-warn">Pi Link: Checking...</span>
+        <span id="masterUpdated" class="small muted">Waiting for first refresh...</span>
+      </div>
     </div>
     <div class="row" style="margin-top:10px; gap:8px;">
       <span id="masterConnHa" class="status-pill status-warn">HA: Pending</span>
@@ -813,6 +817,142 @@ def master_dashboard_init_js() -> str:
 """
 
 
+def settings_dashboard_html() -> str:
+    return """
+  <div class="card">
+    <div class="panel-title-row">
+      <span class="material-symbols-rounded panel-title-icon">settings</span>
+      <div class="panel-title" style="margin-bottom:0;">Hub Settings</div>
+    </div>
+    <div class="panel-meta">Updater, restart controls, and source configuration.</div>
+  </div>
+
+  <div class="card">
+    <div class="panel-title">Connection Controls</div>
+    <div class="row" style="margin-top:10px;">
+      <button id="hubUpdateBtn" class="btn chip-btn" onclick="updateHubModules()">
+        <span id="hubUpdateIcon" class="material-symbols-rounded" aria-hidden="true">system_update_alt</span>
+        <span id="hubUpdateText">Update Modules</span>
+      </button>
+      <button id="hubRestartBtn" class="btn gray chip-btn" onclick="restartHubConnection()">
+        <span id="hubRestartIcon" class="material-symbols-rounded" aria-hidden="true">restart_alt</span>
+        <span id="hubRestartText">Reset Connection</span>
+      </button>
+    </div>
+    <div id="settingsActionMsg" class="small muted" style="margin-top:10px; min-height:20px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="panel-title">Updater Source</div>
+    <div class="grid">
+      <div>
+        <div class="small muted">Mode</div>
+        <select id="settingsUpdateMode" onchange="settingsUpdateModeChanged()">
+          <option value="git">Git</option>
+          <option value="script">Script</option>
+        </select>
+      </div>
+      <div>
+        <div class="small muted">Branch</div>
+        <input id="settingsUpdateBranch" type="text" placeholder="main">
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <div class="small muted">Git repo URL (HTTPS or SSH)</div>
+        <input id="settingsUpdateRepoUrl" class="wide" type="text" placeholder="https://github.com/you/repo.git">
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn" onclick="settingsSaveUpdaterConfig()">Save Updater Settings</button>
+      <button class="btn gray" onclick="settingsRefreshUpdaterConfig()">Refresh</button>
+      <span id="settingsSaveMsg" class="small muted"></span>
+    </div>
+    <div id="settingsUpdaterStatus" class="small muted" style="margin-top:8px;">Loading updater config...</div>
+  </div>
+"""
+
+
+def settings_dashboard_js() -> str:
+    return """
+function settingsSetMessage(text, isError=false) {
+  const settingsMsg = document.getElementById('settingsActionMsg');
+  const masterMsg = document.getElementById('masterActionMsg');
+  [settingsMsg, masterMsg].forEach((el) => {
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('error', !!isError);
+  });
+}
+
+function settingsUpdateModeChanged() {
+  const mode = (document.getElementById('settingsUpdateMode')?.value || 'git').toLowerCase();
+  const repoEl = document.getElementById('settingsUpdateRepoUrl');
+  const branchEl = document.getElementById('settingsUpdateBranch');
+  if (!repoEl || !branchEl) return;
+  const usingGit = mode === 'git';
+  repoEl.disabled = !usingGit;
+  branchEl.disabled = !usingGit;
+}
+
+async function settingsRefreshUpdaterConfig() {
+  try {
+    const cfg = await getHubUpdateConfig();
+    const mode = String(cfg.mode || 'git').toLowerCase();
+    const repoUrl = String(cfg.repo_url || '');
+    const branch = String(cfg.branch || 'main');
+
+    const modeEl = document.getElementById('settingsUpdateMode');
+    const repoEl = document.getElementById('settingsUpdateRepoUrl');
+    const branchEl = document.getElementById('settingsUpdateBranch');
+    if (modeEl) modeEl.value = mode;
+    if (repoEl && document.activeElement !== repoEl) repoEl.value = repoUrl;
+    if (branchEl && document.activeElement !== branchEl) branchEl.value = branch;
+    settingsUpdateModeChanged();
+
+    const statusEl = document.getElementById('settingsUpdaterStatus');
+    if (statusEl) {
+      if (mode === 'git') {
+        statusEl.textContent = repoUrl
+          ? ('Git source: ' + repoUrl + ' (' + branch + ')')
+          : 'Git source not configured yet.';
+      } else {
+        statusEl.textContent = 'Script source: /home/madmaestro/bonsai-water/update_modules.sh';
+      }
+    }
+  } catch (err) {
+    const statusEl = document.getElementById('settingsUpdaterStatus');
+    if (statusEl) statusEl.textContent = 'Updater config unavailable.';
+  }
+}
+
+async function settingsSaveUpdaterConfig() {
+  const mode = String(document.getElementById('settingsUpdateMode')?.value || 'git').toLowerCase();
+  const repo_url = String(document.getElementById('settingsUpdateRepoUrl')?.value || '').trim();
+  const branch = String(document.getElementById('settingsUpdateBranch')?.value || 'main').trim() || 'main';
+  const payload = {mode, repo_url, branch};
+  const msg = document.getElementById('settingsSaveMsg');
+  try {
+    const r = await saveHubUpdateConfig(payload);
+    if (msg) {
+      msg.textContent = r.ok ? 'Updater settings saved.' : 'Save failed.';
+      setTimeout(() => { msg.textContent = ''; }, 2200);
+    }
+    await settingsRefreshUpdaterConfig();
+  } catch (err) {
+    if (msg) {
+      msg.textContent = 'Save failed.';
+      setTimeout(() => { msg.textContent = ''; }, 2200);
+    }
+  }
+}
+"""
+
+
+def settings_dashboard_init_js() -> str:
+    return """
+  await settingsRefreshUpdaterConfig();
+"""
+
+
 def load_plugin_module_names() -> list[str]:
     if not os.path.exists(PLUGIN_CONFIG_FILE):
         return DEFAULT_PLUGIN_MODULES[:]
@@ -989,6 +1129,27 @@ def create_app(plugins: list[Any]) -> Flask:
             )
         )
 
+        settings_pane_id = "pane-settings"
+        settings_meta = MODULE_META.get("settings", {"tag": "SET", "hint": "Updater and hub controls", "icon": "settings"})
+        nav_items.append(
+            render_module_nav_item(
+                pane_id=settings_pane_id,
+                module_name="Settings",
+                module_meta=settings_meta,
+                active=False,
+                module_key="settings",
+            )
+        )
+        plugin_panes.append(
+            render_module_pane(
+                pane_id=settings_pane_id,
+                module_name="Settings",
+                module_meta=settings_meta,
+                module_html=settings_dashboard_html(),
+                active=False,
+            )
+        )
+
         for plugin in plugins:
             plugin_id = safe_plugin_key(getattr(plugin, "plugin_id", plugin.__class__.__name__))
             plugin_name = str(getattr(plugin, "display_name", plugin.__class__.__name__))
@@ -1018,10 +1179,10 @@ def create_app(plugins: list[Any]) -> Flask:
 
         plugin_nav_html = "\n".join(nav_items)
         plugin_html = "\n".join(plugin_panes)
-        js_parts = [master_dashboard_js()]
+        js_parts = [master_dashboard_js(), settings_dashboard_js()]
         js_parts.extend(plugin.dashboard_js() for plugin in plugins if plugin.dashboard_js().strip())
         plugin_js = "\n\n".join(js_parts)
-        init_parts = [master_dashboard_init_js()]
+        init_parts = [master_dashboard_init_js(), settings_dashboard_init_js()]
         init_parts.extend(plugin.dashboard_init_js() for plugin in plugins if plugin.dashboard_init_js().strip())
         plugin_init = "\n".join(init_parts)
 
@@ -1235,6 +1396,21 @@ def create_app(plugins: list[Any]) -> Flask:
       --module-tag-bg: rgba(108, 153, 251, 0.2);
       --module-tag-border: rgba(149, 185, 255, 0.42);
       --module-tag-color: #e2ecff;
+    }
+    .side-link[data-module='settings'] {
+      --module-bg-a: rgba(119, 136, 168, 0.2);
+      --module-bg-b: rgba(92, 108, 140, 0.11);
+      --module-hover-border: rgba(165, 182, 216, 0.38);
+      --module-active-border: rgba(175, 193, 228, 0.5);
+      --module-active-a: rgba(127, 146, 180, 0.28);
+      --module-active-b: rgba(100, 118, 151, 0.16);
+      --module-active-ring: rgba(167, 186, 220, 0.27);
+      --module-icon-bg: rgba(128, 147, 182, 0.24);
+      --module-icon-border: rgba(173, 193, 228, 0.44);
+      --module-icon-color: #ebf2ff;
+      --module-tag-bg: rgba(129, 149, 185, 0.2);
+      --module-tag-border: rgba(173, 193, 228, 0.42);
+      --module-tag-color: #edf4ff;
     }
     .side-link[data-module='home_assistant'] {
       --module-bg-a: rgba(77, 166, 184, 0.18);
@@ -1733,20 +1909,9 @@ def create_app(plugins: list[Any]) -> Flask:
 <div class=\"wrap\">
   <header class=\"app-head card\">
     <div>
-      <div class=\"eyebrow\">Mushroom-Inspired Control Surface</div>
       <div class=\"title\">Pi Control Hub</div>
-      <p class=\"subtitle\">Use module chips to switch systems. Settings save instantly per plugin.</p>
     </div>
     <div class=\"head-actions\">
-      <span id=\"hubPiLink\" class=\"status-pill status-warn\">Pi Link: Checking...</span>
-      <button id=\"hubUpdateBtn\" class=\"btn gray chip-btn\" onclick=\"updateHubModules()\">
-        <span id=\"hubUpdateIcon\" class=\"material-symbols-rounded\" aria-hidden=\"true\">system_update_alt</span>
-        <span id=\"hubUpdateText\">Update Modules</span>
-      </button>
-      <button id=\"hubRestartBtn\" class=\"btn gray chip-btn\" onclick=\"restartHubConnection()\">
-        <span id=\"hubRestartIcon\" class=\"material-symbols-rounded\" aria-hidden=\"true\">restart_alt</span>
-        <span id=\"hubRestartText\">Reset Connection</span>
-      </button>
       <button id=\"themeToggleBtn\" class=\"btn gray chip-btn\" onclick=\"toggleTheme()\">
         <span id=\"themeToggleIcon\" class=\"material-symbols-rounded\" aria-hidden=\"true\">dark_mode</span>
         <span id=\"themeToggleText\">Dark</span>
@@ -1953,21 +2118,15 @@ async function promptHubUpdateConfig() {
 }
 
 async function restartHubConnection() {
-  const actionEl = document.getElementById('masterActionMsg');
   setHubActionsDisabled(true);
   setHubRestartButtonBusy(true);
+  settingsSetMessage('Restarting Pi Control Hub...', false);
   setPiLinkPill('warn', 'Restarting...');
   try {
     const r = await postJsonWithStatus('/api/hub/restart', {});
-    if (actionEl) {
-      actionEl.classList.remove('error');
-      actionEl.textContent = r.message || 'Restart requested.';
-    }
+    settingsSetMessage(r.message || 'Restart requested.', false);
   } catch (err) {
-    if (actionEl) {
-      actionEl.classList.add('error');
-      actionEl.textContent = 'Restart failed: ' + (err.message || 'Request failed');
-    }
+    settingsSetMessage('Restart failed: ' + (err.message || 'Request failed'), true);
     setPiLinkPill('bad', 'Restart failed');
     setHubRestartButtonBusy(false);
     setHubActionsDisabled(false);
@@ -1977,42 +2136,29 @@ async function restartHubConnection() {
 }
 
 async function updateHubModules(alreadyPrompted=false) {
-  const actionEl = document.getElementById('masterActionMsg');
   setHubActionsDisabled(true);
   setHubUpdateButtonBusy(true);
+  settingsSetMessage('Updating modules...', false);
   setPiLinkPill('warn', 'Updating...');
   try {
     const r = await postJsonWithStatus('/api/hub/update', {});
-    if (actionEl) {
-      actionEl.classList.remove('error');
-      actionEl.textContent = r.message || 'Update started.';
-    }
+    settingsSetMessage(r.message || 'Update started.', false);
   } catch (err) {
     const configureRequired = err && err.payload && err.payload.configure_required === true;
     if (configureRequired && !alreadyPrompted) {
       try {
-        if (actionEl) {
-          actionEl.classList.remove('error');
-          actionEl.textContent = 'Updater not configured. Entering setup...';
-        }
+        settingsSetMessage('Updater not configured. Entering setup...', false);
         const configured = await promptHubUpdateConfig();
         if (configured) {
           return updateHubModules(true);
         }
-        if (actionEl) {
-          actionEl.classList.add('error');
-          actionEl.textContent = 'Update setup canceled.';
-        }
+        settingsSetMessage('Update setup canceled.', true);
       } catch (setupErr) {
-        if (actionEl) {
-          actionEl.classList.add('error');
-          actionEl.textContent = 'Update setup failed: ' + (setupErr.message || 'Request failed');
-        }
+        settingsSetMessage('Update setup failed: ' + (setupErr.message || 'Request failed'), true);
         setPiLinkPill('bad', 'Update setup failed');
       }
-    } else if (actionEl) {
-      actionEl.classList.add('error');
-      actionEl.textContent = 'Update failed: ' + (err.message || 'Request failed');
+    } else {
+      settingsSetMessage('Update failed: ' + (err.message || 'Request failed'), true);
     }
     setPiLinkPill('bad', 'Update failed');
     setHubUpdateButtonBusy(false);
