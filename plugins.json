@@ -1,0 +1,7 @@
+{
+  "plugins": [
+    "plugins.home_assistant_plugin",
+    "plugins.bonsai_plugin",
+    "plugins.pihole_plugin"
+  ]
+}

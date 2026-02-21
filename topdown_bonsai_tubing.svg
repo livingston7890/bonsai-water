@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="760" viewBox="0 0 980 760">
+  <rect width="100%" height="100%" fill="#f8f9fb"/>
+
+  <text x="490" y="48" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#1b1f23">Bonsai Watering Layout (Top View)</text>
+
+  <!-- External components -->
+  <rect x="70" y="120" width="120" height="54" rx="8" fill="#2d3748"/>
+  <text x="130" y="154" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#fff">Pump</text>
+
+  <rect x="220" y="112" width="168" height="70" rx="8" fill="#4a5568"/>
+  <text x="304" y="141" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#fff">Quick Disconnect</text>
+  <text x="304" y="162" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#e2e8f0">(one break point)</text>
+
+  <rect x="420" y="112" width="132" height="70" rx="8" fill="#718096"/>
+  <text x="486" y="141" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#fff">1→4</text>
+  <text x="486" y="162" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#fff">Manifold</text>
+
+  <!-- Pot -->
+  <circle cx="610" cy="390" r="250" fill="#ffffff" stroke="#111" stroke-width="5"/>
+  <circle cx="610" cy="390" r="205" fill="none" stroke="#777" stroke-width="3" stroke-dasharray="10 10"/>
+  <text x="610" y="108" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#333">Pot rim</text>
+  <text x="610" y="390" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#666">trunk zone</text>
+  <circle cx="610" cy="390" r="22" fill="#8b5a2b"/>
+
+  <!-- Main line -->
+  <path d="M 190 147 L 220 147 L 388 147 L 420 147 L 500 147 L 540 205" fill="none" stroke="#1e88e5" stroke-width="6" stroke-linecap="round"/>
+  <text x="208" y="205" font-family="Arial, sans-serif" font-size="14" fill="#1e88e5">Main tube</text>
+
+  <!-- Branches -->
+  <path d="M 540 205 L 610 175" fill="none" stroke="#1e88e5" stroke-width="4"/>
+  <path d="M 540 205 L 825 390" fill="none" stroke="#1e88e5" stroke-width="4"/>
+  <path d="M 540 205 L 610 605" fill="none" stroke="#1e88e5" stroke-width="4"/>
+  <path d="M 540 205 L 395 390" fill="none" stroke="#1e88e5" stroke-width="4"/>
+
+  <!-- Outlet points -->
+  <circle cx="610" cy="175" r="9" fill="#1e88e5"/>
+  <circle cx="825" cy="390" r="9" fill="#1e88e5"/>
+  <circle cx="610" cy="605" r="9" fill="#1e88e5"/>
+  <circle cx="395" cy="390" r="9" fill="#1e88e5"/>
+
+  <text x="626" y="170" font-family="Arial, sans-serif" font-size="15" fill="#111">Outlet 1 (12 o’clock)</text>
+  <text x="840" y="395" font-family="Arial, sans-serif" font-size="15" fill="#111">Outlet 2 (3 o’clock)</text>
+  <text x="626" y="622" font-family="Arial, sans-serif" font-size="15" fill="#111">Outlet 3 (6 o’clock)</text>
+  <text x="232" y="395" font-family="Arial, sans-serif" font-size="15" fill="#111">Outlet 4 (9 o’clock)</text>
+
+  <text x="610" y="704" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#222">Use 4 equal-length branch tubes for balanced flow</text>
+  <text x="610" y="730" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#444">Place outlets on outer root zone ring, not on trunk center</text>
+</svg>

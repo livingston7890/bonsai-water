@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local runtime/config artifacts
+hub_update.json
+update_bundle.tgz
+_incoming/
+*.log
+
+# Large handoff/archive artifacts not needed for runtime
+HANDOFF_2026-02-21.tar.gz
+HANDOFF_2026-02-21/
