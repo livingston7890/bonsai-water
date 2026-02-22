@@ -7,7 +7,7 @@ from urllib import error as urlerror
 from urllib import request as urlrequest
 
 DEFAULT_CONFIG = {
-    "ha_enabled": False,
+    "ha_enabled": True,
     "ha_base_url": "http://homeassistant.local:8123",
     "ha_token": "",
     "ha_switch_entity": "",
@@ -82,8 +82,16 @@ class HomeAssistantPlugin:
         except Exception as exc:
             return False, {"error": str(exc)}
 
-    def _entity_state(self, entity_id: str) -> tuple[bool, str]:
+    def _entity_data(self, entity_id: str) -> tuple[bool, dict]:
         ok, data = self._ha_request("GET", f"/api/states/{entity_id}")
+        if not ok:
+            return False, {"error": data.get("error", "Request failed")}
+        if not isinstance(data, dict):
+            return False, {"error": "Invalid entity response"}
+        return True, data
+
+    def _entity_state(self, entity_id: str) -> tuple[bool, str]:
+        ok, data = self._entity_data(entity_id)
         if not ok:
             return False, data.get("error", "Request failed")
         return True, str(data.get("state", "unknown"))
@@ -110,7 +118,7 @@ class HomeAssistantPlugin:
         return max(1, min(100, level))
 
     def get_status(self) -> dict:
-        enabled = bool(self.config.get("ha_enabled", False))
+        enabled = bool(self.config.get("ha_enabled", True))
         base_url = str(self.config.get("ha_base_url", "")).strip()
         token_set = bool(str(self.config.get("ha_token", "")).strip())
         switch_entity = str(self.config.get("ha_switch_entity", "")).strip()
@@ -121,7 +129,7 @@ class HomeAssistantPlugin:
         lamp_right_entity = str(self.config.get("ha_lamp_right_entity", "")).strip()
 
         # Backward compatibility with earlier single-light config.
-        if not lamp_left_entity and light_entity:
+        if not lamp_left_entity and not lamp_right_entity and light_entity:
             lamp_left_entity = light_entity
 
         status = {
@@ -144,11 +152,13 @@ class HomeAssistantPlugin:
             "lamp_right_state": "n/a",
             "lamp_palette_last": str(self.config.get("ha_lamp_palette_last", "")).strip(),
             "lamp_brightness_last": self._clamp_brightness(self.config.get("ha_lamp_brightness_last", 80)),
+            "lamp_primary_entity": "",
+            "lamp_effect_current": "",
+            "lamp_effect_list": [],
+            "lamp_color_mode": "",
+            "lamp_rgb_color": [],
         }
 
-        if not enabled:
-            status["message"] = "Home Assistant integration is disabled."
-            return status
         if not base_url:
             status["message"] = "Set Home Assistant base URL."
             return status
@@ -183,6 +193,29 @@ class HomeAssistantPlugin:
             lr_ok, lr_state = self._entity_state(lamp_right_entity)
             status["lamp_right_state"] = lr_state if lr_ok else f"error ({lr_state})"
 
+        lamp_entities = self._resolve_lamp_entities()
+        primary_lamp = lamp_entities[0] if lamp_entities else ""
+        status["lamp_primary_entity"] = primary_lamp
+        if primary_lamp:
+            detail_ok, detail = self._entity_data(primary_lamp)
+            if detail_ok:
+                attrs = detail.get("attributes") if isinstance(detail.get("attributes"), dict) else {}
+                effect = attrs.get("effect")
+                if effect is not None:
+                    status["lamp_effect_current"] = str(effect)
+                effect_list = attrs.get("effect_list", [])
+                if isinstance(effect_list, list):
+                    status["lamp_effect_list"] = [str(item) for item in effect_list if str(item).strip()]
+                color_mode = attrs.get("color_mode")
+                if color_mode is not None:
+                    status["lamp_color_mode"] = str(color_mode)
+                rgb_color = attrs.get("rgb_color")
+                if isinstance(rgb_color, list) and len(rgb_color) >= 3:
+                    try:
+                        status["lamp_rgb_color"] = [int(rgb_color[0]), int(rgb_color[1]), int(rgb_color[2])]
+                    except Exception:
+                        status["lamp_rgb_color"] = []
+
         return status
 
     def set_switch(self, on: bool) -> tuple[bool, str]:
@@ -216,7 +249,8 @@ class HomeAssistantPlugin:
         side_norm = str(side).strip().lower()
         if side_norm == "left":
             entity_id = str(self.config.get("ha_lamp_left_entity", "")).strip()
-            if not entity_id:
+            right_entity = str(self.config.get("ha_lamp_right_entity", "")).strip()
+            if not entity_id and not right_entity:
                 entity_id = str(self.config.get("ha_light_entity", "")).strip()
             label = "left lamp"
         elif side_norm == "right":
@@ -229,6 +263,19 @@ class HomeAssistantPlugin:
             return False, f"Set {label} entity first."
         return self._call_service("light", "turn_on" if on else "turn_off", entity_id)
 
+    def set_lamps(self, on: bool) -> tuple[bool, str]:
+        entities = self._resolve_lamp_entities()
+        if not entities:
+            return False, "Set floor lamp entity IDs first."
+        failures: list[str] = []
+        for entity_id in entities:
+            ok, message = self._call_service("light", "turn_on" if on else "turn_off", entity_id)
+            if not ok:
+                failures.append(f"{entity_id}: {message}")
+        if failures:
+            return False, "; ".join(failures)
+        return True, "Lamps updated."
+
     def _resolve_lamp_entities(self) -> list[str]:
         left = str(self.config.get("ha_lamp_left_entity", "")).strip()
         right = str(self.config.get("ha_lamp_right_entity", "")).strip()
@@ -237,10 +284,10 @@ class HomeAssistantPlugin:
         entities: list[str] = []
         if left:
             entities.append(left)
-        elif fallback:
-            entities.append(fallback)
         if right:
             entities.append(right)
+        if not entities and fallback:
+            entities.append(fallback)
 
         # Preserve order and remove duplicates.
         seen = set()
@@ -304,6 +351,30 @@ class HomeAssistantPlugin:
         self.config["ha_lamp_palette_last"] = palette_name
         self._save_config(self.config)
         return True, f"{label} palette applied to lamps."
+
+    def set_lamp_effect(self, effect: str) -> tuple[bool, str]:
+        effect_name = str(effect).strip()
+        if not effect_name:
+            return False, "Choose a gradient/effect first."
+
+        entities = self._resolve_lamp_entities()
+        if not entities:
+            return False, "Set floor lamp entity IDs first."
+
+        failures: list[str] = []
+        for entity_id in entities:
+            ok, message = self._call_service(
+                "light",
+                "turn_on",
+                entity_id,
+                extra={"effect": effect_name, "transition": 0.4},
+            )
+            if not ok:
+                failures.append(f"{entity_id}: {message}")
+
+        if failures:
+            return False, "; ".join(failures)
+        return True, f"Effect '{effect_name}' applied."
 
     def set_lamp_brightness(self, brightness_pct: int) -> tuple[bool, str]:
         entities = self._resolve_lamp_entities()
@@ -404,11 +475,27 @@ class HomeAssistantPlugin:
             code = 200 if ok else 502
             return jsonify({"ok": ok, "message": message, "ha_status": self.get_status()}), code
 
+        @app.route("/api/ha/lamps", methods=["POST"])
+        def ha_lamps():
+            payload = request.get_json(force=True)
+            on = bool(payload.get("on", False))
+            ok, message = self.set_lamps(on)
+            code = 200 if ok else 502
+            return jsonify({"ok": ok, "message": message, "ha_status": self.get_status()}), code
+
         @app.route("/api/ha/lamp_palette", methods=["POST"])
         def ha_lamp_palette():
             payload = request.get_json(force=True)
             palette = str(payload.get("palette", "")).strip().lower()
             ok, message = self.set_lamp_palette(palette)
+            code = 200 if ok else 502
+            return jsonify({"ok": ok, "message": message, "ha_status": self.get_status()}), code
+
+        @app.route("/api/ha/lamp_effect", methods=["POST"])
+        def ha_lamp_effect():
+            payload = request.get_json(force=True)
+            effect = str(payload.get("effect", "")).strip()
+            ok, message = self.set_lamp_effect(effect)
             code = 200 if ok else 502
             return jsonify({"ok": ok, "message": message, "ha_status": self.get_status()}), code
 
@@ -472,15 +559,13 @@ class HomeAssistantPlugin:
     <div class="panel-title"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamps, Scenes, and Dimmer</div>
     <div class="row" style="margin-top:8px;">
       <span class="small muted"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamp L:</span>
-      <button class="btn control-btn" onclick="haSetLamp('left', true)">ON</button>
-      <button class="btn gray control-btn" onclick="haSetLamp('left', false)">OFF</button>
+      <button id="haLampLeftBtn" class="btn control-btn" onclick="haToggleLamp('left')">N/A</button>
       <span id="haLampLeftState" class="small muted">n/a</span>
     </div>
 
     <div class="row" style="margin-top:8px;">
       <span class="small muted"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamp R:</span>
-      <button class="btn control-btn" onclick="haSetLamp('right', true)">ON</button>
-      <button class="btn gray control-btn" onclick="haSetLamp('right', false)">OFF</button>
+      <button id="haLampRightBtn" class="btn control-btn" onclick="haToggleLamp('right')">N/A</button>
       <span id="haLampRightState" class="small muted">n/a</span>
     </div>
 
@@ -507,6 +592,14 @@ class HomeAssistantPlugin:
       <span id="haLampPaletteMsg" class="small muted"></span>
     </div>
     <div id="haLampPaletteLast" class="small muted" style="margin-top:6px;"></div>
+
+    <div class="row" style="margin-top:12px; align-items:center;">
+      <span class="small muted"><span class="material-symbols-rounded label-icon">gradient</span>Gradient effect:</span>
+      <select id="haLampEffect" class="wide" style="max-width:320px;"></select>
+      <button id="haLampEffectBtn" class="btn control-btn" onclick="haApplyLampEffect()">Apply Effect</button>
+    </div>
+    <div id="haLampEffectCurrent" class="small muted" style="margin-top:6px;">Current effect: --</div>
+    <div id="haLampEffectMsg" class="small muted" style="margin-top:6px;"></div>
 
     <div class="row" style="margin-top:12px; align-items:center;">
       <span class="small muted"><span class="material-symbols-rounded label-icon">tune</span>Dimmer:</span>
@@ -564,6 +657,69 @@ class HomeAssistantPlugin:
 
     def dashboard_js(self) -> str:
         return """
+function haNormalizeBinaryState(value) {
+  const text = String(value || '').toLowerCase();
+  if (text === 'on') return true;
+  if (text === 'off') return false;
+  return null;
+}
+
+function haSetBinaryToggleButton(buttonId, state, onLabel='ON', offLabel='OFF', unknownLabel='N/A') {
+  const btn = document.getElementById(buttonId);
+  if (!btn) return;
+  btn.classList.remove('state-on', 'state-off', 'state-action', 'state-danger', 'gray');
+  btn.disabled = false;
+  if (state === true) {
+    btn.textContent = onLabel;
+    btn.classList.add('state-on');
+  } else if (state === false) {
+    btn.textContent = offLabel;
+    btn.classList.add('state-off');
+  } else {
+    btn.textContent = unknownLabel;
+    btn.classList.add('gray');
+    btn.disabled = true;
+  }
+}
+
+function haSyncLampEffectControls(st) {
+  const select = document.getElementById('haLampEffect');
+  const applyBtn = document.getElementById('haLampEffectBtn');
+  const currentEl = document.getElementById('haLampEffectCurrent');
+  if (!select || !applyBtn || !currentEl) return;
+
+  const effects = Array.isArray(st.lamp_effect_list) ? st.lamp_effect_list.filter(Boolean).map(String) : [];
+  const current = String(st.lamp_effect_current || '').trim();
+  const activeValue = String(select.value || '').trim();
+
+  select.innerHTML = '';
+  if (!effects.length) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No gradient effects reported by lamp';
+    select.appendChild(opt);
+    select.disabled = true;
+    applyBtn.disabled = true;
+    currentEl.textContent = current ? ('Current effect: ' + current) : 'Current effect: --';
+    return;
+  }
+
+  for (const effectName of effects) {
+    const opt = document.createElement('option');
+    opt.value = effectName;
+    opt.textContent = effectName;
+    select.appendChild(opt);
+  }
+
+  const next = effects.includes(current)
+    ? current
+    : (effects.includes(activeValue) ? activeValue : effects[0]);
+  select.value = next;
+  select.disabled = false;
+  applyBtn.disabled = false;
+  currentEl.textContent = current ? ('Current effect: ' + current) : 'Current effect: (none)';
+}
+
 async function haRefreshStatus() {
   try {
     const st = await api('/api/ha/status');
@@ -597,6 +753,10 @@ async function haRefreshStatus() {
     document.getElementById('haSpeakerRightState').textContent = 'State: ' + (st.speaker_right_state || 'n/a');
     document.getElementById('haLampLeftState').textContent = 'State: ' + (st.lamp_left_state || 'n/a');
     document.getElementById('haLampRightState').textContent = 'State: ' + (st.lamp_right_state || 'n/a');
+    const lampLeftState = haNormalizeBinaryState(st.lamp_left_state);
+    const lampRightState = haNormalizeBinaryState(st.lamp_right_state);
+    haSetBinaryToggleButton('haLampLeftBtn', lampLeftState, 'ON', 'OFF', 'N/A');
+    haSetBinaryToggleButton('haLampRightBtn', lampRightState, 'ON', 'OFF', 'N/A');
 
     const dimmer = document.getElementById('haLampDimmer');
     const brightness = Number(st.lamp_brightness_last || 80);
@@ -613,12 +773,18 @@ async function haRefreshStatus() {
     bothSpeakersBtn.classList.toggle('state-action', !bothSpeakersOn);
     document.getElementById('haBothSpeakersState').textContent = bothSpeakersOn ? 'Both ON' : 'One/Both OFF';
 
-    const bothLampsOn = String(st.lamp_left_state).toLowerCase() === 'on' && String(st.lamp_right_state).toLowerCase() === 'on';
     const bothLampsBtn = document.getElementById('haBothLampsBtn');
-    bothLampsBtn.textContent = bothLampsOn ? 'TURN BOTH OFF' : 'TURN BOTH ON';
-    bothLampsBtn.classList.toggle('state-danger', bothLampsOn);
-    bothLampsBtn.classList.toggle('state-action', !bothLampsOn);
-    document.getElementById('haBothLampsState').textContent = bothLampsOn ? 'Both ON' : 'One/Both OFF';
+    const lampAnyOn = lampLeftState === true || lampRightState === true;
+    bothLampsBtn.textContent = lampAnyOn ? 'TURN BOTH OFF' : 'TURN BOTH ON';
+    bothLampsBtn.classList.toggle('state-danger', lampAnyOn);
+    bothLampsBtn.classList.toggle('state-action', !lampAnyOn);
+    if (lampLeftState === null && lampRightState === null) {
+      document.getElementById('haBothLampsState').textContent = 'State unavailable';
+    } else {
+      document.getElementById('haBothLampsState').textContent = lampAnyOn ? 'One/Both ON' : 'Both OFF';
+    }
+
+    haSyncLampEffectControls(st);
   } catch (err) {
     const conn = document.getElementById('haConn');
     conn.textContent = 'HA status error';
@@ -696,13 +862,36 @@ async function haSetLamp(side, on, silent=false) {
   await haRefreshStatus();
 }
 
+async function haToggleLamp(side) {
+  const st = await api('/api/ha/status');
+  const current = side === 'left'
+    ? haNormalizeBinaryState(st.lamp_left_state)
+    : haNormalizeBinaryState(st.lamp_right_state);
+  if (current === null) {
+    document.getElementById('haSaveMsg').textContent = 'Lamp state unavailable.';
+    setTimeout(() => document.getElementById('haSaveMsg').textContent = '', 2200);
+    return;
+  }
+  await haSetLamp(side, !current);
+}
+
 async function haToggleBothLamps() {
   const st = await api('/api/ha/status');
-  const bothOn = String(st.lamp_left_state).toLowerCase() === 'on' && String(st.lamp_right_state).toLowerCase() === 'on';
-  const targetOn = !bothOn;
-  const left = haSetLamp('left', targetOn, true);
-  const right = haSetLamp('right', targetOn, true);
-  await Promise.allSettled([left, right]);
+  const left = haNormalizeBinaryState(st.lamp_left_state);
+  const right = haNormalizeBinaryState(st.lamp_right_state);
+  const anyOn = left === true || right === true;
+  const targetOn = !anyOn;
+  const r = await api('/api/ha/lamps', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({on: targetOn}),
+  });
+  if (!r.ok) {
+    document.getElementById('haSaveMsg').textContent = r.message || 'Lamp update failed.';
+    setTimeout(() => document.getElementById('haSaveMsg').textContent = '', 2500);
+    await haRefreshStatus();
+    return;
+  }
   document.getElementById('haSaveMsg').textContent = targetOn ? 'Both lamps ON.' : 'Both lamps OFF.';
   setTimeout(() => document.getElementById('haSaveMsg').textContent = '', 2000);
   await haRefreshStatus();
@@ -716,6 +905,24 @@ async function haSetLampPalette(palette) {
   });
   document.getElementById('haLampPaletteMsg').textContent = r.message || 'Palette applied.';
   setTimeout(() => document.getElementById('haLampPaletteMsg').textContent = '', 2500);
+  await haRefreshStatus();
+}
+
+async function haApplyLampEffect() {
+  const select = document.getElementById('haLampEffect');
+  const effect = String((select && select.value) || '').trim();
+  if (!effect) {
+    document.getElementById('haLampEffectMsg').textContent = 'Choose a gradient effect first.';
+    setTimeout(() => document.getElementById('haLampEffectMsg').textContent = '', 2200);
+    return;
+  }
+  const r = await api('/api/ha/lamp_effect', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({effect}),
+  });
+  document.getElementById('haLampEffectMsg').textContent = r.message || 'Effect applied.';
+  setTimeout(() => document.getElementById('haLampEffectMsg').textContent = '', 2600);
   await haRefreshStatus();
 }
 
