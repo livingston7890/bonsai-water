@@ -218,11 +218,11 @@ def master_dashboard_html() -> str:
         </div>
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">lightbulb</span>Lamp left</span>
-          <span id="masterHaLampLeft" class="master-state neutral">--</span>
+          <button id="masterHaLampLeft" type="button" class="master-state master-state-btn neutral" onclick="masterToggleHaLamp('left')">--</button>
         </div>
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">lightbulb</span>Lamp right</span>
-          <span id="masterHaLampRight" class="master-state neutral">--</span>
+          <button id="masterHaLampRight" type="button" class="master-state master-state-btn neutral" onclick="masterToggleHaLamp('right')">--</button>
         </div>
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">tune</span>Dimmer</span>
@@ -248,7 +248,6 @@ def master_dashboard_html() -> str:
           <span class="master-control-label"><span class="material-symbols-rounded label-icon">tune</span>Dimmer</span>
           <input id="masterLampDimmer" type="range" min="1" max="100" step="1" value="80" oninput="masterLampDimmerInputChanged()">
           <span id="masterLampDimmerValue" class="status-pill status-warn">80%</span>
-          <button class="btn master-mini-btn" onclick="masterApplyHaLampBrightness()">APPLY</button>
         </div>
       </div>
     </div>
@@ -278,7 +277,7 @@ def master_dashboard_html() -> str:
         </div>
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">view_in_ar</span>OLED</span>
-          <span id="masterBonsaiOled" class="master-state neutral">--</span>
+          <button id="masterBonsaiOled" type="button" class="master-state master-state-btn neutral" onclick="masterToggleBonsaiOled()">--</button>
         </div>
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">memory</span>GPIO</span>
@@ -297,10 +296,6 @@ def master_dashboard_html() -> str:
         <div class="master-control-group">
           <span class="master-control-label"><span class="material-symbols-rounded label-icon">play_circle</span>Manual Pump</span>
           <button id="masterBonsaiManualToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleBonsaiManual()">--</button>
-        </div>
-        <div class="master-control-group">
-          <span class="master-control-label"><span class="material-symbols-rounded label-icon">view_in_ar</span>OLED</span>
-          <button id="masterBonsaiOledToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleBonsaiOled()">--</button>
         </div>
       </div>
     </div>
@@ -455,6 +450,14 @@ function masterSetToggleButton(id, state, onLabel='ON', offLabel='OFF', unknownL
   btn.classList.add('state-action');
 }
 
+function masterSetStatePillButton(id, state, onLabel='ON', offLabel='OFF', unknownLabel='N/A') {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  const normalized = masterNormalizeBoolean(state);
+  masterSetReadOnlyState(id, state, onLabel, offLabel, unknownLabel);
+  btn.disabled = normalized === null;
+}
+
 function masterSetManualToggleButton(id, running) {
   const btn = document.getElementById(id);
   if (!btn) return;
@@ -502,11 +505,15 @@ let masterActionTimer = null;
 const masterUiState = {
   haSpeakers: null,
   haLamps: null,
+  haLampLeft: null,
+  haLampRight: null,
   bonsaiAuto: null,
   bonsaiManual: null,
   bonsaiOled: null,
   piholeBlocking: null,
 };
+let masterDimmerDebounceTimer = null;
+let masterDimmerLastSent = null;
 
 function masterNotify(message, isError=false) {
   const el = document.getElementById('masterActionMsg');
@@ -553,10 +560,7 @@ async function masterSetHaBothSpeakers(on) {
 
 async function masterSetHaBothLamps(on) {
   await masterRunAction(on ? 'Lamps ON' : 'Lamps OFF', async () => {
-    await Promise.all([
-      masterPost('/api/ha/lamp', {side: 'left', on: !!on}),
-      masterPost('/api/ha/lamp', {side: 'right', on: !!on}),
-    ]);
+    await masterPost('/api/ha/lamps', {on: !!on});
     return {message: on ? 'Both lamps ON.' : 'Both lamps OFF.'};
   });
 }
@@ -566,6 +570,7 @@ function masterLampDimmerInputChanged() {
   if (!input) return;
   const value = parseInt(input.value, 10) || 80;
   masterSetText('masterLampDimmerValue', value + '%');
+  masterScheduleHaLampBrightness();
 }
 
 async function masterSetHaLampPalette(palette) {
@@ -575,13 +580,29 @@ async function masterSetHaLampPalette(palette) {
   );
 }
 
-async function masterApplyHaLampBrightness() {
+function masterScheduleHaLampBrightness() {
+  if (masterDimmerDebounceTimer) clearTimeout(masterDimmerDebounceTimer);
+  masterDimmerDebounceTimer = setTimeout(() => {
+    void masterApplyHaLampBrightness(true);
+  }, 240);
+}
+
+async function masterApplyHaLampBrightness(fromSlider=false) {
   const input = document.getElementById('masterLampDimmer');
   const brightness = input ? (parseInt(input.value, 10) || 80) : 80;
-  await masterRunAction(
-    'Lamp dimmer',
-    () => masterPost('/api/ha/lamp_brightness', {brightness_pct: brightness})
-  );
+  if (fromSlider && masterDimmerLastSent === brightness) return;
+  try {
+    const response = await masterPost('/api/ha/lamp_brightness', {brightness_pct: brightness});
+    masterDimmerLastSent = brightness;
+    if (!fromSlider) {
+      const msg = response && (response.message || response.msg || response.error);
+      masterNotify(msg || 'Lamp dimmer updated.');
+    }
+  } catch (err) {
+    masterNotify('Lamp dimmer failed: ' + err.message, true);
+  }
+  masterCachedPihole = null;
+  await masterRefresh();
 }
 
 async function masterSetBonsaiAuto(enabled) {
@@ -620,6 +641,19 @@ async function masterToggleHaSpeakers() {
 async function masterToggleHaLamps() {
   const target = masterUiState.haLamps === true ? false : true;
   await masterSetHaBothLamps(target);
+}
+
+async function masterToggleHaLamp(side) {
+  const sideNorm = String(side || '').toLowerCase();
+  const current = sideNorm === 'left' ? masterUiState.haLampLeft : sideNorm === 'right' ? masterUiState.haLampRight : null;
+  if (current === null) {
+    masterNotify('Lamp state unavailable.', true);
+    return;
+  }
+  await masterRunAction(
+    current ? ('Lamp ' + sideNorm + ' OFF') : ('Lamp ' + sideNorm + ' ON'),
+    () => masterPost('/api/ha/lamp', {side: sideNorm, on: !current})
+  );
 }
 
 async function masterToggleBonsaiAuto() {
@@ -670,8 +704,8 @@ async function masterRefresh() {
     masterSetReadOnlyState('masterHaLight', ha.light_state);
     masterSetReadOnlyState('masterHaSpeakerLeft', ha.speaker_left_state);
     masterSetReadOnlyState('masterHaSpeakerRight', ha.speaker_right_state);
-    masterSetReadOnlyState('masterHaLampLeft', ha.lamp_left_state);
-    masterSetReadOnlyState('masterHaLampRight', ha.lamp_right_state);
+    masterSetStatePillButton('masterHaLampLeft', ha.lamp_left_state);
+    masterSetStatePillButton('masterHaLampRight', ha.lamp_right_state);
 
     const speakerLeftBool = masterNormalizeBoolean(ha.speaker_left_state);
     const speakerRightBool = masterNormalizeBoolean(ha.speaker_right_state);
@@ -706,6 +740,8 @@ async function masterRefresh() {
 
     masterUiState.haSpeakers = speakersBothState;
     masterUiState.haLamps = lampsBothState;
+    masterUiState.haLampLeft = lampLeftBool;
+    masterUiState.haLampRight = lampRightBool;
     masterSetToggleButton('masterHaSpeakersToggleBtn', speakersBothState, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
     masterSetToggleButton('masterHaLampsToggleBtn', lampsBothState, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
 
@@ -714,7 +750,9 @@ async function masterRefresh() {
     if (dimmer && document.activeElement !== dimmer) {
       dimmer.value = String(dimmerBrightness);
     }
-    masterSetText('masterLampDimmerValue', Math.max(1, Math.min(100, dimmerBrightness)) + '%');
+    const clampedDimmer = Math.max(1, Math.min(100, dimmerBrightness));
+    masterSetText('masterLampDimmerValue', clampedDimmer + '%');
+    masterDimmerLastSent = clampedDimmer;
   } else {
     masterSetConnPill('masterConnHa', false, 'Unavailable');
     masterSetConnPill('masterHaConnection', false, 'Unavailable');
@@ -724,9 +762,14 @@ async function masterRefresh() {
     masterSetText('masterLampMeta', 'Preset: NONE | L: N/A | R: N/A');
     masterUiState.haSpeakers = null;
     masterUiState.haLamps = null;
+    masterUiState.haLampLeft = null;
+    masterUiState.haLampRight = null;
     masterSetToggleButton('masterHaSpeakersToggleBtn', null, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
     masterSetToggleButton('masterHaLampsToggleBtn', null, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
+    masterSetStatePillButton('masterHaLampLeft', null);
+    masterSetStatePillButton('masterHaLampRight', null);
     masterSetText('masterLampDimmerValue', '--');
+    masterDimmerLastSent = null;
   }
 
   if (bonsai) {
@@ -751,7 +794,7 @@ async function masterRefresh() {
     masterSetText('masterAutoWaterKpi', autoOn ? 'ON' : 'OFF');
     masterSetText('masterLastWatered', 'Last: ' + String(bonsai.last_watered || '--'));
     masterSetReadOnlyState('masterBonsaiAuto', autoOn ? 'on' : 'off');
-    masterSetReadOnlyState('masterBonsaiOled', bonsai.oled_enabled ? 'on' : 'off');
+    masterSetStatePillButton('masterBonsaiOled', bonsai.oled_enabled ? 'on' : 'off');
     masterSetReadOnlyState('masterBonsaiGpio', bonsai.gpio_ready ? 'on' : 'off', 'READY', 'OFFLINE', 'UNKNOWN');
 
     const low = bonsai.config ? bonsai.config.moisture_threshold_low : '--';
@@ -762,7 +805,6 @@ async function masterRefresh() {
     masterUiState.bonsaiOled = !!bonsai.oled_enabled;
     masterUiState.bonsaiManual = manualRunning;
     masterSetToggleButton('masterBonsaiAutoToggleBtn', autoOn, 'ON', 'OFF', 'N/A');
-    masterSetToggleButton('masterBonsaiOledToggleBtn', !!bonsai.oled_enabled, 'ON', 'OFF', 'N/A');
     masterSetManualToggleButton('masterBonsaiManualToggleBtn', manualRunning);
   } else {
     masterSetConnPill('masterConnBonsai', false, 'Unavailable');
@@ -770,7 +812,7 @@ async function masterRefresh() {
     masterUiState.bonsaiOled = null;
     masterUiState.bonsaiManual = null;
     masterSetToggleButton('masterBonsaiAutoToggleBtn', null, 'ON', 'OFF', 'N/A');
-    masterSetToggleButton('masterBonsaiOledToggleBtn', null, 'ON', 'OFF', 'N/A');
+    masterSetStatePillButton('masterBonsaiOled', null);
     masterSetManualToggleButton('masterBonsaiManualToggleBtn', false);
   }
 
@@ -1785,6 +1827,24 @@ def create_app(plugins: list[Any]) -> Flask:
       letter-spacing: 0.05em;
       text-transform: uppercase;
       font-weight: 800;
+    }
+    .master-state-btn {
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      font-family: inherit;
+      line-height: 1;
+      transition: transform 120ms ease, filter 150ms ease, opacity 150ms ease;
+    }
+    .master-state-btn:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+    .master-state-btn:active:not(:disabled) {
+      transform: translateY(1px) scale(0.995);
+    }
+    .master-state-btn:disabled {
+      cursor: default;
+      opacity: 0.8;
     }
     .master-state.on {
       color: #91edc4;

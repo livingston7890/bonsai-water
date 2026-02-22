@@ -605,7 +605,6 @@ class HomeAssistantPlugin:
       <span class="small muted"><span class="material-symbols-rounded label-icon">tune</span>Dimmer:</span>
       <input id="haLampDimmer" type="range" min="1" max="100" step="1" value="80" oninput="haLampDimmerInputChanged()">
       <span id="haLampDimmerValue" class="status-pill status-warn">80%</span>
-      <button class="btn control-btn" onclick="haApplyLampBrightness()">Apply Dimmer</button>
     </div>
     <div id="haLampDimmerMsg" class="small muted" style="margin-top:8px;"></div>
   </div>
@@ -720,6 +719,9 @@ function haSyncLampEffectControls(st) {
   currentEl.textContent = current ? ('Current effect: ' + current) : 'Current effect: (none)';
 }
 
+let haLampDimmerDebounceTimer = null;
+let haLampDimmerLastSent = null;
+
 async function haRefreshStatus() {
   try {
     const st = await api('/api/ha/status');
@@ -761,7 +763,9 @@ async function haRefreshStatus() {
     const dimmer = document.getElementById('haLampDimmer');
     const brightness = Number(st.lamp_brightness_last || 80);
     if (document.activeElement !== dimmer) dimmer.value = brightness;
-    document.getElementById('haLampDimmerValue').textContent = brightness + '%';
+    const clampedBrightness = Math.max(1, Math.min(100, brightness));
+    document.getElementById('haLampDimmerValue').textContent = clampedBrightness + '%';
+    haLampDimmerLastSent = clampedBrightness;
     document.getElementById('haLampPaletteLast').textContent = st.lamp_palette_last
       ? ('Last preset: ' + String(st.lamp_palette_last).toUpperCase())
       : 'No lamp color preset applied yet.';
@@ -822,6 +826,14 @@ async function haSaveConfig() {
 function haLampDimmerInputChanged() {
   const value = parseInt(document.getElementById('haLampDimmer').value, 10) || 80;
   document.getElementById('haLampDimmerValue').textContent = value + '%';
+  haScheduleLampBrightnessApply();
+}
+
+function haScheduleLampBrightnessApply() {
+  if (haLampDimmerDebounceTimer) clearTimeout(haLampDimmerDebounceTimer);
+  haLampDimmerDebounceTimer = setTimeout(() => {
+    void haApplyLampBrightness(true);
+  }, 240);
 }
 
 async function haSetSpeaker(side, on, silent=false) {
@@ -926,16 +938,27 @@ async function haApplyLampEffect() {
   await haRefreshStatus();
 }
 
-async function haApplyLampBrightness() {
+async function haApplyLampBrightness(fromSlider=false) {
   const brightness = parseInt(document.getElementById('haLampDimmer').value, 10) || 80;
-  const r = await api('/api/ha/lamp_brightness', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({brightness_pct: brightness}),
-  });
-  document.getElementById('haLampDimmerMsg').textContent = r.message || 'Dimmer updated.';
-  setTimeout(() => document.getElementById('haLampDimmerMsg').textContent = '', 2500);
-  await haRefreshStatus();
+  if (fromSlider && haLampDimmerLastSent === brightness) return;
+  try {
+    const r = await api('/api/ha/lamp_brightness', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({brightness_pct: brightness}),
+    });
+    haLampDimmerLastSent = brightness;
+    document.getElementById('haLampDimmerMsg').textContent = fromSlider
+      ? ('Dimmer ' + brightness + '%')
+      : (r.message || 'Dimmer updated.');
+    setTimeout(() => document.getElementById('haLampDimmerMsg').textContent = '', fromSlider ? 1200 : 2500);
+    if (!fromSlider) {
+      await haRefreshStatus();
+    }
+  } catch (err) {
+    document.getElementById('haLampDimmerMsg').textContent = 'Dimmer update failed: ' + err.message;
+    setTimeout(() => document.getElementById('haLampDimmerMsg').textContent = '', 2500);
+  }
 }
 """
 
