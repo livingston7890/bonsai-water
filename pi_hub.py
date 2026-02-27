@@ -263,12 +263,14 @@ def master_dashboard_html() -> str:
           <span class="master-control-label"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamps</span>
           <button id="masterHaLampsToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleHaLamps()">--</button>
         </div>
-        <div class="master-control-group">
+        <div class="master-control-group master-palette-group">
           <span class="master-control-label"><span class="material-symbols-rounded label-icon">palette</span>Lamp colors</span>
-          <button class="btn master-mini-btn preset-btn preset-cool" onclick="masterSetHaLampPalette('cool')">COOL</button>
-          <button class="btn master-mini-btn preset-btn preset-money" onclick="masterSetHaLampPalette('money')">MONEY</button>
-          <button class="btn master-mini-btn preset-btn preset-warm" onclick="masterSetHaLampPalette('warm')">WARM</button>
-          <button class="btn master-mini-btn preset-btn preset-candle" onclick="masterSetHaLampPalette('candle')">CANDLE</button>
+          <div class="master-palette-grid">
+            <button class="btn master-mini-btn preset-btn preset-cool" onclick="masterSetHaLampPalette('cool')">COOL</button>
+            <button class="btn master-mini-btn preset-btn preset-money" onclick="masterSetHaLampPalette('money')">MONEY</button>
+            <button class="btn master-mini-btn preset-btn preset-warm" onclick="masterSetHaLampPalette('warm')">WARM</button>
+            <button class="btn master-mini-btn preset-btn preset-candle" onclick="masterSetHaLampPalette('candle')">CANDLE</button>
+          </div>
         </div>
         <div class="master-control-group">
           <span class="master-control-label"><span class="material-symbols-rounded label-icon">tune</span>Dimmer</span>
@@ -1995,6 +1997,24 @@ def create_app(plugins: list[Any]) -> Flask:
       letter-spacing: 0.03em;
       box-shadow: none;
     }
+    .master-palette-group {
+      align-items: flex-start;
+    }
+    .master-palette-group .master-control-label {
+      min-width: 100%;
+    }
+    .master-palette-grid {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .master-palette-grid .master-mini-btn {
+      width: 100%;
+      min-width: 0;
+      padding-left: 8px;
+      padding-right: 8px;
+    }
     .master-msg {
       display: inline-block;
       max-width: 65%;
@@ -2070,6 +2090,7 @@ def create_app(plugins: list[Any]) -> Flask:
       .master-state { min-width: 80px; font-size: 10px; }
       .master-control-label { min-width: 100%; }
       .master-mini-btn { min-height: 40px; }
+      .master-palette-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   </style>
 </head>
