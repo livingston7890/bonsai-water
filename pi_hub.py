@@ -24,6 +24,8 @@ DEFAULT_HUB_UPDATE_CONFIG = {
     "mode": "git",
     "repo_url": "",
     "branch": "main",
+    "auto_deploy": True,
+    "poll_seconds": 60,
 }
 
 DEFAULT_PLUGIN_MODULES = [
@@ -41,8 +43,8 @@ MODULE_META = {
 }
 
 
-def load_hub_update_config() -> dict[str, str]:
-    config: dict[str, str] = DEFAULT_HUB_UPDATE_CONFIG.copy()
+def load_hub_update_config() -> dict[str, Any]:
+    config: dict[str, Any] = DEFAULT_HUB_UPDATE_CONFIG.copy()
     if not os.path.isfile(HUB_UPDATE_CONFIG_FILE):
         return config
 
@@ -56,16 +58,39 @@ def load_hub_update_config() -> dict[str, str]:
             config["repo_url"] = str(raw.get("repo_url", config["repo_url"])).strip()
             branch = str(raw.get("branch", config["branch"])).strip()
             config["branch"] = branch or "main"
+            auto_deploy_raw = raw.get("auto_deploy", config["auto_deploy"])
+            if isinstance(auto_deploy_raw, bool):
+                config["auto_deploy"] = auto_deploy_raw
+            else:
+                config["auto_deploy"] = str(auto_deploy_raw).strip().lower() in {"1", "true", "yes", "on"}
+            try:
+                poll_seconds = int(raw.get("poll_seconds", config["poll_seconds"]))
+            except Exception:
+                poll_seconds = int(config["poll_seconds"])
+            config["poll_seconds"] = max(30, min(3600, poll_seconds))
     except Exception:
         pass
     return config
 
 
-def save_hub_update_config(config: dict[str, str]) -> None:
+def save_hub_update_config(config: dict[str, Any]) -> None:
+    auto_deploy_raw = config.get("auto_deploy", True)
+    if isinstance(auto_deploy_raw, bool):
+        auto_deploy = auto_deploy_raw
+    else:
+        auto_deploy = str(auto_deploy_raw).strip().lower() in {"1", "true", "yes", "on"}
+    try:
+        poll_seconds = int(config.get("poll_seconds", 60))
+    except Exception:
+        poll_seconds = 60
+    poll_seconds = max(30, min(3600, poll_seconds))
+
     cleaned = {
         "mode": str(config.get("mode", "git")).strip().lower(),
         "repo_url": str(config.get("repo_url", "")).strip(),
         "branch": (str(config.get("branch", "main")).strip() or "main"),
+        "auto_deploy": bool(auto_deploy),
+        "poll_seconds": int(poll_seconds),
     }
     if cleaned["mode"] not in {"git", "script"}:
         cleaned["mode"] = "git"
@@ -898,6 +923,14 @@ def settings_dashboard_html() -> str:
         <div class="small muted">Branch</div>
         <input id="settingsUpdateBranch" type="text" placeholder="main">
       </div>
+      <div>
+        <div class="small muted">Auto deploy</div>
+        <label><input id="settingsAutoDeploy" class="switch" type="checkbox"> Pull + restart on new commits</label>
+      </div>
+      <div>
+        <div class="small muted">Poll interval (sec)</div>
+        <input id="settingsAutoDeployPoll" type="number" min="30" max="3600" step="10" value="60">
+      </div>
       <div style="grid-column: 1 / -1;">
         <div class="small muted">Git repo URL (HTTPS or SSH)</div>
         <input id="settingsUpdateRepoUrl" class="wide" type="text" placeholder="https://github.com/you/repo.git">
@@ -941,20 +974,28 @@ async function settingsRefreshUpdaterConfig() {
     const mode = String(cfg.mode || 'git').toLowerCase();
     const repoUrl = String(cfg.repo_url || '');
     const branch = String(cfg.branch || 'main');
+    const autoDeploy = !!cfg.auto_deploy;
+    const pollSeconds = Number(cfg.poll_seconds || 60);
 
     const modeEl = document.getElementById('settingsUpdateMode');
     const repoEl = document.getElementById('settingsUpdateRepoUrl');
     const branchEl = document.getElementById('settingsUpdateBranch');
+    const autoEl = document.getElementById('settingsAutoDeploy');
+    const pollEl = document.getElementById('settingsAutoDeployPoll');
     if (modeEl) modeEl.value = mode;
     if (repoEl && document.activeElement !== repoEl) repoEl.value = repoUrl;
     if (branchEl && document.activeElement !== branchEl) branchEl.value = branch;
+    if (autoEl) autoEl.checked = autoDeploy;
+    if (pollEl && document.activeElement !== pollEl) {
+      pollEl.value = String(Math.max(30, Math.min(3600, Number.isFinite(pollSeconds) ? Math.round(pollSeconds) : 60)));
+    }
     settingsUpdateModeChanged();
 
     const statusEl = document.getElementById('settingsUpdaterStatus');
     if (statusEl) {
       if (mode === 'git') {
         statusEl.textContent = repoUrl
-          ? ('Git source: ' + repoUrl + ' (' + branch + ')')
+          ? ('Git source: ' + repoUrl + ' (' + branch + ') | Auto deploy: ' + (autoDeploy ? 'ON' : 'OFF'))
           : 'Git source not configured yet.';
       } else {
         statusEl.textContent = 'Script source: /home/madmaestro/bonsai-water/update_modules.sh';
@@ -970,7 +1011,13 @@ async function settingsSaveUpdaterConfig() {
   const mode = String(document.getElementById('settingsUpdateMode')?.value || 'git').toLowerCase();
   const repo_url = String(document.getElementById('settingsUpdateRepoUrl')?.value || '').trim();
   const branch = String(document.getElementById('settingsUpdateBranch')?.value || 'main').trim() || 'main';
-  const payload = {mode, repo_url, branch};
+  const autoDeploy = !!document.getElementById('settingsAutoDeploy')?.checked;
+  const pollEl = document.getElementById('settingsAutoDeployPoll');
+  let pollSeconds = parseInt(String(pollEl?.value || '60'), 10);
+  if (!Number.isFinite(pollSeconds)) pollSeconds = 60;
+  pollSeconds = Math.max(30, Math.min(3600, pollSeconds));
+  if (pollEl) pollEl.value = String(pollSeconds);
+  const payload = {mode, repo_url, branch, auto_deploy: autoDeploy, poll_seconds: pollSeconds};
   const msg = document.getElementById('settingsSaveMsg');
   try {
     const r = await saveHubUpdateConfig(payload);
@@ -1135,6 +1182,48 @@ def create_app(plugins: list[Any]) -> Flask:
             return "git pull --ff-only", "git", None, False
 
         return None, "", "No updater source available.", False
+
+    def _git_update_available(repo_url: str, branch: str) -> tuple[bool, str]:
+        if not repo_url:
+            return False, "Auto deploy skipped: Git repo URL is not configured."
+        branch_name = branch or "main"
+        probe_cmd = (
+            "set -e; "
+            f"cd {shlex.quote(APP_DIR)}; "
+            "export GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=accept-new'; "
+            "if [ ! -d .git ]; then git init -q; fi; "
+            "if git remote get-url origin >/dev/null 2>&1; then "
+            f"git remote set-url origin {shlex.quote(repo_url)}; "
+            "else "
+            f"git remote add origin {shlex.quote(repo_url)}; "
+            "fi; "
+            f"git fetch --depth 1 origin {shlex.quote(branch_name)}; "
+            "if git rev-parse --verify HEAD >/dev/null 2>&1; then "
+            "LOCAL=$(git rev-parse HEAD); REMOTE=$(git rev-parse FETCH_HEAD); "
+            "if [ \"$LOCAL\" = \"$REMOTE\" ]; then echo NO_CHANGE; else echo UPDATE; fi; "
+            "else echo UPDATE; fi"
+        )
+        try:
+            completed = subprocess.run(
+                ["/bin/sh", "-lc", probe_cmd],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=40,
+            )
+        except Exception as exc:
+            return False, f"Auto deploy probe failed: {exc}"
+
+        if completed.returncode != 0:
+            details = (completed.stderr or completed.stdout or "").strip()
+            short = details.splitlines()[-1] if details else "git probe failed"
+            return False, f"Auto deploy probe failed: {short}"
+
+        marker = ""
+        lines = [line.strip() for line in (completed.stdout or "").splitlines() if line.strip()]
+        if lines:
+            marker = lines[-1]
+        return marker == "UPDATE", "update available" if marker == "UPDATE" else "no change"
 
     for plugin in plugins:
         plugin_id = safe_plugin_key(getattr(plugin, "plugin_id", plugin.__class__.__name__))
@@ -2358,10 +2447,22 @@ async function updateHubModules(alreadyPrompted=false) {
             mode = "git"
         repo_url = str(payload.get("repo_url", current.get("repo_url", ""))).strip()
         branch = str(payload.get("branch", current.get("branch", "main"))).strip() or "main"
+        auto_deploy_raw = payload.get("auto_deploy", current.get("auto_deploy", True))
+        if isinstance(auto_deploy_raw, bool):
+            auto_deploy = auto_deploy_raw
+        else:
+            auto_deploy = str(auto_deploy_raw).strip().lower() in {"1", "true", "yes", "on"}
+        try:
+            poll_seconds = int(payload.get("poll_seconds", current.get("poll_seconds", 60)))
+        except Exception:
+            poll_seconds = int(current.get("poll_seconds", 60))
+        poll_seconds = max(30, min(3600, poll_seconds))
         updated = {
             "mode": mode,
             "repo_url": repo_url,
             "branch": branch,
+            "auto_deploy": bool(auto_deploy),
+            "poll_seconds": int(poll_seconds),
         }
         save_hub_update_config(updated)
         return jsonify({"ok": True, "config": updated})
@@ -2385,6 +2486,61 @@ async function updateHubModules(alreadyPrompted=false) {
         if not ok:
             return jsonify({"ok": False, "message": message}), 500
         return jsonify({"ok": True, "message": f"Updating from {source} and restarting..."})
+
+    def _start_auto_deploy_worker() -> None:
+        env_raw = str(os.environ.get("PI_HUB_AUTO_DEPLOY", "")).strip().lower()
+        env_override: bool | None = None
+        if env_raw:
+            env_override = env_raw in {"1", "true", "yes", "on"}
+
+        def _worker() -> None:
+            time.sleep(20)
+            while True:
+                try:
+                    cfg = load_hub_update_config()
+                    mode = str(cfg.get("mode", "git")).strip().lower()
+                    cfg_enabled_raw = cfg.get("auto_deploy", True)
+                    if isinstance(cfg_enabled_raw, bool):
+                        cfg_enabled = cfg_enabled_raw
+                    else:
+                        cfg_enabled = str(cfg_enabled_raw).strip().lower() in {"1", "true", "yes", "on"}
+                    enabled = env_override if env_override is not None else cfg_enabled
+
+                    try:
+                        poll_seconds = int(cfg.get("poll_seconds", 60))
+                    except Exception:
+                        poll_seconds = 60
+                    poll_seconds = max(30, min(3600, poll_seconds))
+
+                    if enabled and mode == "git":
+                        repo_url = str(cfg.get("repo_url", "")).strip()
+                        branch = str(cfg.get("branch", "main")).strip() or "main"
+                        has_update, detail = _git_update_available(repo_url, branch)
+                        if has_update:
+                            print(f"[HUB][AUTO] Update found on {branch}; applying and restarting...")
+                            update_cmd, source, reason, configure_required = _resolve_update_command()
+                            if not update_cmd:
+                                print(f"[HUB][AUTO] Update command unavailable: {reason or 'not configured'}")
+                            elif configure_required:
+                                print("[HUB][AUTO] Update requires configuration in Settings.")
+                            else:
+                                ok, message = _launch_hub_restart(update_cmd=update_cmd)
+                                if ok:
+                                    print("[HUB][AUTO] Update launched.")
+                                    return
+                                print(f"[HUB][AUTO] Restart launch failed: {message}")
+                        elif detail.startswith("Auto deploy probe failed"):
+                            print(f"[HUB][AUTO] {detail}")
+
+                    time.sleep(poll_seconds)
+                except Exception as exc:
+                    print(f"[HUB][AUTO] Worker error: {exc}")
+                    time.sleep(60)
+
+        threading.Thread(target=_worker, daemon=True).start()
+        print("[HUB][AUTO] Auto-deploy worker started.")
+
+    _start_auto_deploy_worker()
 
     return app
 

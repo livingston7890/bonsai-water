@@ -307,7 +307,7 @@ class HomeAssistantPlugin:
 
         brightness = self._clamp_brightness(self.config.get("ha_lamp_brightness_last", 80))
         if palette_name == "warm":
-            colors = [(255, 80, 20), (255, 170, 45), (255, 120, 0), (255, 210, 80)]
+            colors = [(255, 80, 20), (255, 110, 28), (255, 125, 16), (255, 145, 40)]
             label = "Warm"
             use_color_temp = False
         elif palette_name == "cool":
