@@ -744,13 +744,13 @@ async function masterRefresh() {
     const lampsBothOff = lampLeftBool === false && lampRightBool === false;
 
     masterSetText('masterSpeakerKpi', speakerAnyOn ? 'ON' : (speakersBothOff ? 'OFF' : 'N/A'));
-    masterSetText('masterSpeakerMeta', 'L: ' + boolText(speakerLeftBool) + ' | R: ' + boolText(speakerRightBool));
+    masterSetText('masterSpeakerMeta', 'L ' + boolText(speakerLeftBool) + ' | R ' + boolText(speakerRightBool));
     masterSetText('masterLampKpi', lampAnyOn ? 'ON' : (lampsBothOff ? 'OFF' : 'N/A'));
     masterSetText(
       'masterLampMeta',
-      'Preset: ' + String(ha.lamp_palette_last || 'none').toUpperCase()
-      + ' | L: ' + boolText(lampLeftBool)
-      + ' | R: ' + boolText(lampRightBool)
+      String(ha.lamp_palette_last || 'none').toUpperCase()
+      + ' | L ' + boolText(lampLeftBool)
+      + ' | R ' + boolText(lampRightBool)
     );
 
     const brightness = Number(ha.lamp_brightness_last || 0);
@@ -782,9 +782,9 @@ async function masterRefresh() {
     masterSetConnPill('masterConnHa', false, 'Unavailable');
     masterSetConnPill('masterHaConnection', false, 'Unavailable');
     masterSetText('masterSpeakerKpi', 'N/A');
-    masterSetText('masterSpeakerMeta', 'L: N/A | R: N/A');
+    masterSetText('masterSpeakerMeta', 'L N/A | R N/A');
     masterSetText('masterLampKpi', 'N/A');
-    masterSetText('masterLampMeta', 'Preset: NONE | L: N/A | R: N/A');
+    masterSetText('masterLampMeta', 'NONE | L N/A | R N/A');
     masterUiState.haSpeakers = null;
     masterUiState.haLamps = null;
     masterUiState.haLampLeft = null;
@@ -1863,6 +1863,9 @@ def create_app(plugins: list[Any]) -> Flask:
     .master-kpi-sub {
       font-size: 13px;
       line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .master-detail-grid {
       display: grid;
