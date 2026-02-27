@@ -266,6 +266,7 @@ def master_dashboard_html() -> str:
         <div class="master-control-group">
           <span class="master-control-label"><span class="material-symbols-rounded label-icon">palette</span>Lamp colors</span>
           <button class="btn master-mini-btn preset-btn preset-cool" onclick="masterSetHaLampPalette('cool')">COOL</button>
+          <button class="btn master-mini-btn preset-btn preset-money" onclick="masterSetHaLampPalette('money')">MONEY</button>
           <button class="btn master-mini-btn preset-btn preset-warm" onclick="masterSetHaLampPalette('warm')">WARM</button>
           <button class="btn master-mini-btn preset-btn preset-candle" onclick="masterSetHaLampPalette('candle')">CANDLE</button>
         </div>
@@ -845,15 +846,16 @@ async function masterRefresh() {
     const piholeMsg = pihole.connected ? 'Connected' : (pihole.message || 'Unavailable');
     masterSetConnPill('masterConnPihole', !!pihole.connected, piholeMsg);
     masterSetConnPill('masterPiholeConnection', !!pihole.connected, piholeMsg);
+    const piholeMode = String(pihole.mode_active || pihole.mode || 'auto').toUpperCase();
 
     const blocking = pihole.blocking === true ? 'ON' : pihole.blocking === false ? 'OFF' : 'N/A';
     masterSetText('masterDnsKpi', blocking);
-    masterSetText('masterDnsMeta', 'Mode: ' + String(pihole.mode || 'auto').toUpperCase());
+    masterSetText('masterDnsMeta', 'Mode: ' + piholeMode);
     masterSetText('masterQueriesKpi', masterNum(pihole.queries_today, 0));
     masterSetText('masterBlockedPctKpi', pihole.blocked_percent === null || pihole.blocked_percent === undefined ? '--' : (Number(pihole.blocked_percent).toFixed(1) + '%'));
     masterSetText('masterBlockedCountMeta', 'Blocked: ' + masterNum(pihole.blocked_today, 0));
 
-    masterSetText('masterPiholeMode', String(pihole.mode || 'auto').toUpperCase());
+    masterSetText('masterPiholeMode', piholeMode);
     masterSetText('masterPiholeBlocking', blocking);
     masterSetText('masterPiholeQueries', masterNum(pihole.queries_today, 0));
     masterSetText('masterPiholeBlocked', masterNum(pihole.blocked_today, 0));
@@ -1750,6 +1752,10 @@ def create_app(plugins: list[Any]) -> Flask:
     .btn.preset-cool {
       background: linear-gradient(145deg, rgba(99, 124, 221, 0.4), rgba(73, 117, 212, 0.32));
       color: #eef3ff;
+    }
+    .btn.preset-money {
+      background: linear-gradient(145deg, rgba(56, 172, 88, 0.4), rgba(112, 224, 136, 0.32));
+      color: #effff2;
     }
     .btn.preset-candle {
       background: linear-gradient(145deg, rgba(236, 178, 98, 0.4), rgba(207, 133, 65, 0.32));

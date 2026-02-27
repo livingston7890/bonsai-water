@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import ssl
+import threading
 from typing import Optional
 from urllib import error as urlerror
 from urllib import parse as urlparse
@@ -26,6 +27,8 @@ class PiholePlugin:
         self.app_dir = app_dir
         self.config_file = os.path.join(app_dir, "pihole_config.json")
         self.config = self._load_config()
+        self._v6_sid_lock = threading.Lock()
+        self._v6_sid: Optional[str] = None
         self._save_config(self.config)
 
     def _load_config(self) -> dict:
@@ -106,11 +109,30 @@ class PiholePlugin:
             return ""
         if base.endswith("/api"):
             return base
-        if base.endswith("/admin"):
-            return f"{base}/api"
-        if base.endswith("/admin/"):
-            return f"{base.rstrip('/')}/api"
-        return f"{base}/api"
+
+        # Pi-hole v6 API lives at /api (not /admin/api). If users paste
+        # an admin URL, strip that suffix before appending /api.
+        base_clean = base.rstrip("/")
+        if base_clean.endswith("/admin"):
+            base_clean = base_clean[: -len("/admin")]
+        return f"{base_clean}/api"
+
+    def _v6_url(self, path: str, sid: str = "") -> str:
+        api_root = self._v6_api_root()
+        base = f"{api_root}{path}"
+        sid_clean = str(sid or "").strip()
+        if not sid_clean:
+            return base
+        joiner = "&" if "?" in base else "?"
+        return f"{base}{joiner}sid={urlparse.quote_plus(sid_clean)}"
+
+    def _v6_clear_cached_sid(self, logout: bool = False) -> None:
+        sid = ""
+        with self._v6_sid_lock:
+            sid = str(self._v6_sid or "").strip()
+            self._v6_sid = None
+        if logout and sid:
+            self._v6_logout(sid)
 
     def _v6_login(self) -> tuple[bool, str, str]:
         api_root = self._v6_api_root()
@@ -131,10 +153,62 @@ class PiholePlugin:
 
         return True, sid, "OK"
 
+    @staticmethod
+    def _v6_msg_has_api_seats(msg: str) -> bool:
+        text = str(msg or "").strip().lower()
+        return any(
+            marker in text
+            for marker in (
+                "api seats exceeded",
+                "api_seats_exceeded",
+                "max sessions",
+                "max_sessions",
+                "maximum api sessions",
+            )
+        )
+
+    @staticmethod
+    def _v6_msg_has_bad_sid(msg: str) -> bool:
+        text = str(msg or "").strip().lower()
+        return any(
+            marker in text
+            for marker in (
+                "invalid sid",
+                "sid invalid",
+                "unknown sid",
+                "sid missing",
+                "session expired",
+                "unauthorized",
+                "forbidden",
+                "http 401",
+                "http 403",
+            )
+        )
+
+    def _v6_get_sid(self, force_new: bool = False) -> tuple[bool, str, str]:
+        if force_new:
+            self._v6_clear_cached_sid(logout=True)
+        else:
+            with self._v6_sid_lock:
+                if self._v6_sid:
+                    return True, self._v6_sid, "OK"
+
+        password = str(self.config.get("pihole_password", "")).strip()
+        if not password:
+            # Pi-hole can run with auth disabled; allow sid-less reads/writes in that mode.
+            return True, "", "NO_AUTH"
+
+        ok, sid, msg = self._v6_login()
+        if not ok:
+            if self._v6_msg_has_api_seats(msg):
+                return False, "", "API seats exceeded. Clear stale API sessions in Pi-hole admin or restart Pi-hole DNS."
+            return False, "", msg
+        with self._v6_sid_lock:
+            self._v6_sid = sid
+        return True, sid, "OK"
+
     def _v6_get_blocking(self, sid: str) -> tuple[bool, Optional[bool], str]:
-        api_root = self._v6_api_root()
-        sid_q = urlparse.quote_plus(sid)
-        ok, data = self._request_json("GET", f"{api_root}/dns/blocking?sid={sid_q}")
+        ok, data = self._request_json("GET", self._v6_url("/dns/blocking", sid))
         if not ok:
             return False, None, data.get("error", "Failed to read blocking state")
 
@@ -143,24 +217,27 @@ class PiholePlugin:
         return False, None, "Pi-hole v6 response missing 'blocking' field."
 
     def _v6_set_blocking(self, sid: str, enabled: bool) -> tuple[bool, str]:
-        api_root = self._v6_api_root()
-        sid_q = urlparse.quote_plus(sid)
         ok, data = self._request_json(
             "POST",
-            f"{api_root}/dns/blocking?sid={sid_q}",
+            self._v6_url("/dns/blocking", sid),
             payload={"blocking": bool(enabled)},
         )
         if not ok:
             return False, data.get("error", "Failed to set blocking state")
         return True, "OK"
 
-    def _v6_get_summary(self, sid: str) -> dict:
-        api_root = self._v6_api_root()
-        sid_q = urlparse.quote_plus(sid)
+    def _v6_logout(self, sid: str) -> None:
+        sid_clean = str(sid or "").strip()
+        if not sid_clean:
+            return
+        # Best-effort: endpoint shape can vary by Pi-hole version.
+        self._request_json("DELETE", self._v6_url("/auth", sid_clean))
+        self._request_json("POST", self._v6_url("/auth/logout", sid_clean), payload={})
 
+    def _v6_get_summary(self, sid: str) -> dict:
         # Endpoint names can differ across versions; try common candidates.
         for path in ("/stats/summary", "/stats/queries", "/stats"):
-            ok, data = self._request_json("GET", f"{api_root}{path}?sid={sid_q}")
+            ok, data = self._request_json("GET", self._v6_url(path, sid))
             if ok and isinstance(data, dict) and data:
                 return data
         return {}
@@ -218,7 +295,7 @@ class PiholePlugin:
         return None
 
     def _status_from_v6(self) -> dict:
-        ok_login, sid, msg = self._v6_login()
+        ok_login, sid, msg = self._v6_get_sid(force_new=False)
         if not ok_login:
             return {
                 "enabled": bool(self.config.get("pihole_enabled", False)),
@@ -232,6 +309,14 @@ class PiholePlugin:
             }
 
         ok_block, blocking, bmsg = self._v6_get_blocking(sid)
+        if not ok_block and self._v6_msg_has_bad_sid(bmsg):
+            ok_login, sid, msg = self._v6_get_sid(force_new=True)
+            if ok_login:
+                ok_block, blocking, bmsg = self._v6_get_blocking(sid)
+            else:
+                bmsg = msg
+        if not ok_block and not str(sid or "").strip() and self._v6_msg_has_bad_sid(bmsg):
+            bmsg = "Pi-hole API auth required. Set Pi-hole password/app password."
         summary = self._v6_get_summary(sid)
 
         queries_today = self._pick_number(summary, ("queries", "queries_today", "total_queries"))
@@ -294,6 +379,8 @@ class PiholePlugin:
             "enabled": enabled,
             "base_url": base,
             "mode": mode,
+            "mode_configured": mode,
+            "mode_active": None,
             "verify_tls": verify_tls,
             "connected": False,
             "message": "Pi-hole integration disabled.",
@@ -311,47 +398,83 @@ class PiholePlugin:
             return base_status
 
         if mode == "v6":
-            return self._status_from_v6()
+            status = self._status_from_v6()
+            status["mode"] = "v6"
+            status["mode_configured"] = "v6"
+            status["mode_active"] = "v6"
+            return status
         if mode == "legacy":
-            return self._status_from_legacy()
+            status = self._status_from_legacy()
+            status["mode"] = "legacy"
+            status["mode_configured"] = "legacy"
+            status["mode_active"] = "legacy"
+            return status
 
         # Auto mode: try v6 first, then legacy.
         v6 = self._status_from_v6()
         if v6.get("connected"):
-            v6["mode"] = "v6"
+            v6["mode"] = "auto"
+            v6["mode_configured"] = "auto"
+            v6["mode_active"] = "v6"
             return v6
+
+        v6_msg = str(v6.get("message", "")).strip()
+        if self._v6_msg_has_api_seats(v6_msg):
+            return {
+                **base_status,
+                "message": v6_msg,
+                "mode": "auto",
+                "mode_configured": "auto",
+                "mode_active": "v6",
+            }
 
         legacy = self._status_from_legacy()
         if legacy.get("connected"):
-            legacy["mode"] = "legacy"
+            legacy["mode"] = "auto"
+            legacy["mode_configured"] = "auto"
+            legacy["mode_active"] = "legacy"
             return legacy
 
         # Keep the most informative message.
-        msg = legacy.get("message") or v6.get("message") or "Connection failed."
+        msg = v6_msg or str(legacy.get("message") or "").strip() or "Connection failed."
         return {
             **base_status,
             "message": msg,
             "mode": "auto",
+            "mode_configured": "auto",
+            "mode_active": None,
         }
 
     def set_blocking(self, enabled: bool) -> tuple[bool, str]:
         mode = str(self.config.get("pihole_mode", "auto")).strip().lower()
 
         if mode == "v6":
-            ok, sid, msg = self._v6_login()
+            ok, sid, msg = self._v6_get_sid(force_new=False)
             if not ok:
                 return False, msg
-            return self._v6_set_blocking(sid, enabled)
+            set_ok, set_msg = self._v6_set_blocking(sid, enabled)
+            if not set_ok and self._v6_msg_has_bad_sid(set_msg):
+                ok, sid, msg = self._v6_get_sid(force_new=True)
+                if not ok:
+                    return False, msg
+                return self._v6_set_blocking(sid, enabled)
+            return set_ok, set_msg
 
         if mode == "legacy":
             return self._legacy_set_blocking(enabled)
 
         # Auto mode: try v6 then legacy.
-        ok, sid, _ = self._v6_login()
+        ok, sid, _ = self._v6_get_sid(force_new=False)
         if ok:
             set_ok, set_msg = self._v6_set_blocking(sid, enabled)
             if set_ok:
                 return True, set_msg
+            if self._v6_msg_has_bad_sid(set_msg):
+                ok, sid, _ = self._v6_get_sid(force_new=True)
+                if ok:
+                    set_ok, set_msg = self._v6_set_blocking(sid, enabled)
+                    if set_ok:
+                        return True, set_msg
 
         return self._legacy_set_blocking(enabled)
 
@@ -359,6 +482,7 @@ class PiholePlugin:
         return
 
     def shutdown(self) -> None:
+        self._v6_clear_cached_sid(logout=True)
         return
 
     def register_routes(self, app) -> None:
@@ -371,22 +495,29 @@ class PiholePlugin:
         @app.route("/api/pihole/config", methods=["POST"])
         def pihole_config():
             payload = request.get_json(force=True)
+            sid_reset_needed = False
 
             if "pihole_enabled" in payload:
                 self.config["pihole_enabled"] = bool(payload["pihole_enabled"])
             if "pihole_base_url" in payload:
                 self.config["pihole_base_url"] = str(payload["pihole_base_url"]).strip()
+                sid_reset_needed = True
             if "pihole_mode" in payload:
                 mode = str(payload["pihole_mode"]).strip().lower()
                 if mode in {"auto", "v6", "legacy"}:
                     self.config["pihole_mode"] = mode
+                    sid_reset_needed = True
             if "pihole_verify_tls" in payload:
                 self.config["pihole_verify_tls"] = bool(payload["pihole_verify_tls"])
+                sid_reset_needed = True
             if "pihole_password" in payload and str(payload["pihole_password"]).strip():
                 self.config["pihole_password"] = str(payload["pihole_password"]).strip()
+                sid_reset_needed = True
             if "pihole_legacy_api_token" in payload and str(payload["pihole_legacy_api_token"]).strip():
                 self.config["pihole_legacy_api_token"] = str(payload["pihole_legacy_api_token"]).strip()
 
+            if sid_reset_needed:
+                self._v6_clear_cached_sid(logout=True)
             self._save_config(self.config)
             return jsonify({"ok": True, "status": self.get_status()})
 
@@ -492,11 +623,12 @@ async function piholeRefreshStatus() {
     };
 
     setIfIdle('piholeBaseUrl', st.base_url);
-    setIfIdle('piholeMode', st.mode || 'auto');
+    setIfIdle('piholeMode', st.mode_configured || st.mode || 'auto');
 
     const conn = document.getElementById('piholeConn');
+    const activeMode = String(st.mode_active || st.mode || 'auto');
     if (st.connected) {
-      conn.textContent = `Connected (${st.mode})`;
+      conn.textContent = `Connected (${activeMode})`;
       conn.className = 'status-pill status-ok';
     } else if (st.enabled) {
       conn.textContent = st.message || 'Not connected';

@@ -314,12 +314,16 @@ class HomeAssistantPlugin:
             colors = [(130, 70, 255), (40, 120, 255), (20, 200, 170), (70, 180, 255)]
             label = "Cool"
             use_color_temp = False
+        elif palette_name == "money":
+            colors = [(38, 128, 62), (142, 235, 151), (32, 116, 56), (160, 246, 168)]
+            label = "Money"
+            use_color_temp = False
         elif palette_name == "candle":
             colors = []
             label = "Candle"
             use_color_temp = True
         else:
-            return False, "Palette must be 'warm', 'cool', or 'candle'."
+            return False, "Palette must be 'cool', 'money', 'warm', or 'candle'."
 
         failures: list[str] = []
         for idx, entity_id in enumerate(entities):
@@ -581,6 +585,10 @@ class HomeAssistantPlugin:
         class="btn control-btn preset-btn preset-cool"
         onclick="haSetLampPalette('cool')"
       >COOL</button>
+      <button
+        class="btn control-btn preset-btn preset-money"
+        onclick="haSetLampPalette('money')"
+      >MONEY</button>
       <button
         class="btn control-btn preset-btn preset-warm"
         onclick="haSetLampPalette('warm')"
