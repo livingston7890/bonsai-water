@@ -256,23 +256,6 @@ def master_dashboard_html() -> str:
       </div>
       <div class="master-controls">
         <div class="master-control-group">
-          <span class="master-control-label"><span class="material-symbols-rounded label-icon">speaker</span>Speakers</span>
-          <button id="masterHaSpeakersToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleHaSpeakers()">--</button>
-        </div>
-        <div class="master-control-group">
-          <span class="master-control-label"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamps</span>
-          <button id="masterHaLampsToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleHaLamps()">--</button>
-        </div>
-        <div class="master-control-group master-palette-group">
-          <span class="master-control-label"><span class="material-symbols-rounded label-icon">palette</span>Lamp colors</span>
-          <div class="master-palette-grid">
-            <button class="btn master-mini-btn preset-btn preset-cool" onclick="masterSetHaLampPalette('cool')">COOL</button>
-            <button class="btn master-mini-btn preset-btn preset-money" onclick="masterSetHaLampPalette('money')">MONEY</button>
-            <button class="btn master-mini-btn preset-btn preset-warm" onclick="masterSetHaLampPalette('warm')">WARM</button>
-            <button class="btn master-mini-btn preset-btn preset-candle" onclick="masterSetHaLampPalette('candle')">CANDLE</button>
-          </div>
-        </div>
-        <div class="master-control-group">
           <span class="master-control-label"><span class="material-symbols-rounded label-icon">tune</span>Dimmer</span>
           <input id="masterLampDimmer" type="range" min="1" max="100" step="1" value="80" oninput="masterLampDimmerInputChanged()">
           <span id="masterLampDimmerValue" class="status-pill status-warn">80%</span>
@@ -486,6 +469,35 @@ function masterSetStatePillButton(id, state, onLabel='ON', offLabel='OFF', unkno
   btn.disabled = normalized === null;
 }
 
+function masterSetPaletteState(activePalette) {
+  const active = String(activePalette || '').trim().toLowerCase();
+  const pairs = [
+    ['headPaletteCool', 'cool'],
+    ['headPaletteMoney', 'money'],
+    ['headPaletteWarm', 'warm'],
+    ['headPaletteCandle', 'candle'],
+  ];
+  for (const [id, palette] of pairs) {
+    const btn = document.getElementById(id);
+    if (!btn) continue;
+    btn.classList.toggle('is-active', active === palette);
+  }
+}
+
+function masterSetShopButtonState(isOpen, enabled=true) {
+  const btn = document.getElementById('headShopToggleBtn');
+  if (!btn) return;
+  btn.disabled = !enabled;
+  btn.classList.remove('state-on', 'state-off', 'state-action', 'state-danger');
+  if (isOpen) {
+    btn.textContent = 'Shop Open';
+    btn.classList.add('state-on');
+    return;
+  }
+  btn.textContent = 'Shop Closed';
+  btn.classList.add('state-danger');
+}
+
 function masterSetManualToggleButton(id, running) {
   const btn = document.getElementById(id);
   if (!btn) return;
@@ -531,6 +543,7 @@ function masterSetText(id, text) {
 
 let masterActionTimer = null;
 const masterUiState = {
+  haShopOpen: false,
   haSpeakers: null,
   haLamps: null,
   haLampLeft: null,
@@ -590,6 +603,21 @@ async function masterSetHaBothLamps(on) {
   await masterRunAction(on ? 'Lamps ON' : 'Lamps OFF', async () => {
     await masterPost('/api/ha/lamps', {on: !!on});
     return {message: on ? 'Both lamps ON.' : 'Both lamps OFF.'};
+  });
+}
+
+async function masterSetShopMode(open) {
+  await masterRunAction(open ? 'Shop Open' : 'Shop Closed', async () => {
+    await Promise.all([
+      masterPost('/api/ha/speaker', {side: 'left', on: !!open}),
+      masterPost('/api/ha/speaker', {side: 'right', on: !!open}),
+      masterPost('/api/ha/lamps', {on: !!open}),
+    ]);
+    return {
+      message: open
+        ? 'Shop opened: speakers and lamps ON.'
+        : 'Shop closed: speakers and lamps OFF.',
+    };
   });
 }
 
@@ -669,6 +697,11 @@ async function masterToggleHaSpeakers() {
 async function masterToggleHaLamps() {
   const target = masterUiState.haLamps === true ? false : true;
   await masterSetHaBothLamps(target);
+}
+
+async function masterToggleShopMode() {
+  const target = masterUiState.haShopOpen === true ? false : true;
+  await masterSetShopMode(target);
 }
 
 async function masterToggleHaLamp(side) {
@@ -770,8 +803,11 @@ async function masterRefresh() {
     masterUiState.haLamps = lampsBothState;
     masterUiState.haLampLeft = lampLeftBool;
     masterUiState.haLampRight = lampRightBool;
-    masterSetToggleButton('masterHaSpeakersToggleBtn', speakersBothState, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
-    masterSetToggleButton('masterHaLampsToggleBtn', lampsBothState, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
+    masterUiState.haShopOpen = (speakersBothState === true && lampsBothState === true);
+    masterSetShopButtonState(masterUiState.haShopOpen, true);
+    masterSetToggleButton('headHaSpeakersToggleBtn', speakersBothState, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
+    masterSetToggleButton('headHaLampsToggleBtn', lampsBothState, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
+    masterSetPaletteState(ha.lamp_palette_last);
 
     const dimmer = document.getElementById('masterLampDimmer');
     const dimmerBrightness = Number(ha.lamp_brightness_last || 80);
@@ -792,8 +828,11 @@ async function masterRefresh() {
     masterUiState.haLamps = null;
     masterUiState.haLampLeft = null;
     masterUiState.haLampRight = null;
-    masterSetToggleButton('masterHaSpeakersToggleBtn', null, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
-    masterSetToggleButton('masterHaLampsToggleBtn', null, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
+    masterUiState.haShopOpen = false;
+    masterSetShopButtonState(false, false);
+    masterSetToggleButton('headHaSpeakersToggleBtn', null, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
+    masterSetToggleButton('headHaLampsToggleBtn', null, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
+    masterSetPaletteState('');
     masterSetStatePillButton('masterHaLampLeft', null);
     masterSetStatePillButton('masterHaLampRight', null);
     masterSetText('masterLampDimmerValue', '--');
@@ -1415,10 +1454,14 @@ def create_app(plugins: list[Any]) -> Flask:
     }
     .app-head {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
       gap: 14px;
       margin-bottom: 16px;
+    }
+    .head-brand {
+      flex: 0 0 auto;
+      min-width: 0;
     }
     .eyebrow {
       font-size: 12px;
@@ -1447,6 +1490,67 @@ def create_app(plugins: list[Any]) -> Flask:
       align-items: center;
       justify-content: flex-end;
       flex-wrap: wrap;
+      flex: 0 0 auto;
+    }
+    .toolbar-row {
+      display: flex;
+      justify-content: flex-end;
+      margin: -4px 0 16px;
+    }
+    .head-quickbar {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .head-quick-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+    .head-quick-group-shop {
+      flex: 0 0 auto;
+    }
+    .head-quick-group-palette {
+      flex: 1 1 430px;
+    }
+    .head-quick-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--sub);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .head-quick-btn {
+      min-height: 34px;
+      padding: 7px 11px;
+      font-size: 12px;
+      line-height: 1;
+      letter-spacing: 0.03em;
+      box-shadow: none;
+    }
+    .head-shop-btn {
+      min-width: 128px;
+      justify-content: center;
+    }
+    .head-palette-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .head-palette-row .btn.is-active {
+      border-color: rgba(255, 255, 255, 0.42);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
     }
     .layout {
       display: grid;
@@ -1997,24 +2101,6 @@ def create_app(plugins: list[Any]) -> Flask:
       letter-spacing: 0.03em;
       box-shadow: none;
     }
-    .master-palette-group {
-      align-items: flex-start;
-    }
-    .master-palette-group .master-control-label {
-      min-width: 100%;
-    }
-    .master-palette-grid {
-      width: 100%;
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 6px;
-    }
-    .master-palette-grid .master-mini-btn {
-      width: 100%;
-      min-width: 0;
-      padding-left: 8px;
-      padding-right: 8px;
-    }
     .master-msg {
       display: inline-block;
       max-width: 65%;
@@ -2067,6 +2153,18 @@ def create_app(plugins: list[Any]) -> Flask:
       .wrap { padding: 18px 14px 28px; }
       .app-head { flex-direction: column; }
       .title { font-size: 30px; }
+      .head-brand,
+      .head-quickbar,
+      .head-actions { width: 100%; }
+      .toolbar-row {
+        justify-content: flex-start;
+        margin: -4px 0 16px;
+      }
+      .head-actions { justify-content: flex-start; }
+      .head-quick-group { width: 100%; }
+      .head-quick-group-shop { flex-basis: 100%; }
+      .head-quick-group-palette { flex-basis: 100%; }
+      .head-quick-label { min-width: 100%; }
       .side-link { min-width: 100%; width: 100%; }
       .btn {
         min-height: 44px;
@@ -2090,23 +2188,47 @@ def create_app(plugins: list[Any]) -> Flask:
       .master-state { min-width: 80px; font-size: 10px; }
       .master-control-label { min-width: 100%; }
       .master-mini-btn { min-height: 40px; }
-      .master-palette-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .head-quick-btn { min-height: 40px; }
     }
   </style>
 </head>
 <body>
 <div class=\"wrap\">
   <header class=\"app-head card\">
-    <div>
+    <div class=\"head-brand\">
       <div class=\"title\">Pi Control Hub</div>
     </div>
+    <div class=\"head-quickbar\">
+      <div class=\"head-quick-group head-quick-group-shop\">
+        <button id=\"headShopToggleBtn\" class=\"btn head-quick-btn head-shop-btn state-danger\" onclick=\"masterToggleShopMode()\">Shop Closed</button>
+      </div>
+      <div class=\"head-quick-group\">
+        <span class=\"head-quick-label\"><span class=\"material-symbols-rounded label-icon\">speaker</span>Speakers</span>
+        <button id=\"headHaSpeakersToggleBtn\" class=\"btn head-quick-btn state-action\" onclick=\"masterToggleHaSpeakers()\">--</button>
+      </div>
+      <div class=\"head-quick-group\">
+        <span class=\"head-quick-label\"><span class=\"material-symbols-rounded label-icon\">lightbulb</span>Lamps</span>
+        <button id=\"headHaLampsToggleBtn\" class=\"btn head-quick-btn state-action\" onclick=\"masterToggleHaLamps()\">--</button>
+      </div>
+      <div class=\"head-quick-group head-quick-group-palette\">
+        <span class=\"head-quick-label\"><span class=\"material-symbols-rounded label-icon\">palette</span>Lamp Colors</span>
+        <div class=\"head-palette-row\">
+          <button id=\"headPaletteCool\" class=\"btn head-quick-btn preset-btn preset-cool\" onclick=\"masterSetHaLampPalette('cool')\">COOL</button>
+          <button id=\"headPaletteMoney\" class=\"btn head-quick-btn preset-btn preset-money\" onclick=\"masterSetHaLampPalette('money')\">MONEY</button>
+          <button id=\"headPaletteWarm\" class=\"btn head-quick-btn preset-btn preset-warm\" onclick=\"masterSetHaLampPalette('warm')\">WARM</button>
+          <button id=\"headPaletteCandle\" class=\"btn head-quick-btn preset-btn preset-candle\" onclick=\"masterSetHaLampPalette('candle')\">CANDLE</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <div class=\"toolbar-row\">
     <div class=\"head-actions\">
       <button id=\"themeToggleBtn\" class=\"btn gray chip-btn\" onclick=\"toggleTheme()\">
         <span id=\"themeToggleIcon\" class=\"material-symbols-rounded\" aria-hidden=\"true\">dark_mode</span>
         <span id=\"themeToggleText\">Dark</span>
       </button>
     </div>
-  </header>
+  </div>
 
   <div class=\"layout\">
     <aside class=\"sidebar\">
