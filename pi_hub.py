@@ -191,16 +191,6 @@ def master_dashboard_html() -> str:
       <div id="masterLastWatered" class="master-kpi-sub muted">Last: --</div>
     </div>
     <div class="card master-kpi-card">
-      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamps</div>
-      <div id="masterLampKpi" class="master-kpi-value">--</div>
-      <div id="masterLampMeta" class="master-kpi-sub muted">Preset: --</div>
-    </div>
-    <div class="card master-kpi-card">
-      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">speaker</span>Speakers</div>
-      <div id="masterSpeakerKpi" class="master-kpi-value">--</div>
-      <div id="masterSpeakerMeta" class="master-kpi-sub muted">No data yet</div>
-    </div>
-    <div class="card master-kpi-card">
       <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">shield</span>DNS Blocking</div>
       <div id="masterDnsKpi" class="master-kpi-value">--</div>
       <div id="masterDnsMeta" class="master-kpi-sub muted">No data yet</div>
@@ -224,14 +214,6 @@ def master_dashboard_html() -> str:
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">link</span>Connection</span>
           <span id="masterHaConnection" class="status-pill status-warn">Pending</span>
-        </div>
-        <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">power_settings_new</span>Smart plug</span>
-          <span id="masterHaPlug" class="master-state neutral">--</span>
-        </div>
-        <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">lightbulb</span>Main light</span>
-          <span id="masterHaLight" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">speaker</span>Speaker left</span>
@@ -780,8 +762,6 @@ async function masterRefresh() {
     masterSetConnPill('masterConnHa', !!ha.connected, haMsg);
     masterSetConnPill('masterHaConnection', !!ha.connected, haMsg);
 
-    masterSetReadOnlyState('masterHaPlug', ha.switch_state);
-    masterSetReadOnlyState('masterHaLight', ha.light_state);
     masterSetReadOnlyState('masterHaSpeakerLeft', ha.speaker_left_state);
     masterSetReadOnlyState('masterHaSpeakerRight', ha.speaker_right_state);
     masterSetStatePillButton('masterHaLampLeft', ha.lamp_left_state);
@@ -791,22 +771,6 @@ async function masterRefresh() {
     const speakerRightBool = masterNormalizeBoolean(ha.speaker_right_state);
     const lampLeftBool = masterNormalizeBoolean(ha.lamp_left_state);
     const lampRightBool = masterNormalizeBoolean(ha.lamp_right_state);
-    const boolText = (value) => value === true ? 'ON' : (value === false ? 'OFF' : 'N/A');
-
-    const speakerAnyOn = speakerLeftBool === true || speakerRightBool === true;
-    const speakersBothOff = speakerLeftBool === false && speakerRightBool === false;
-    const lampAnyOn = lampLeftBool === true || lampRightBool === true;
-    const lampsBothOff = lampLeftBool === false && lampRightBool === false;
-
-    masterSetText('masterSpeakerKpi', speakerAnyOn ? 'ON' : (speakersBothOff ? 'OFF' : 'N/A'));
-    masterSetText('masterSpeakerMeta', 'L ' + boolText(speakerLeftBool) + ' | R ' + boolText(speakerRightBool));
-    masterSetText('masterLampKpi', lampAnyOn ? 'ON' : (lampsBothOff ? 'OFF' : 'N/A'));
-    masterSetText(
-      'masterLampMeta',
-      String(ha.lamp_palette_last || 'none').toUpperCase()
-      + ' | L ' + boolText(lampLeftBool)
-      + ' | R ' + boolText(lampRightBool)
-    );
 
     const brightness = Number(ha.lamp_brightness_last || 0);
     masterSetText('masterHaDimmer', brightness > 0 ? (brightness + '%') : '--');
@@ -839,10 +803,6 @@ async function masterRefresh() {
   } else {
     masterSetConnPill('masterConnHa', false, 'Unavailable');
     masterSetConnPill('masterHaConnection', false, 'Unavailable');
-    masterSetText('masterSpeakerKpi', 'N/A');
-    masterSetText('masterSpeakerMeta', 'L N/A | R N/A');
-    masterSetText('masterLampKpi', 'N/A');
-    masterSetText('masterLampMeta', 'NONE | L N/A | R N/A');
     masterUiState.haSpeakers = null;
     masterUiState.haLamps = null;
     masterUiState.haLampLeft = null;
