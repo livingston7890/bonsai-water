@@ -498,6 +498,25 @@ function masterSetShopButtonState(isOpen, enabled=true) {
   btn.classList.add('state-danger');
 }
 
+function masterSetHeaderPowerButton(id, isOn, onText, offText, enabled=true) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.disabled = !enabled;
+  btn.classList.remove('state-on', 'state-off', 'state-action', 'state-danger');
+  if (!enabled) {
+    btn.textContent = offText;
+    btn.classList.add('state-off');
+    return;
+  }
+  if (isOn) {
+    btn.textContent = onText;
+    btn.classList.add('state-on');
+    return;
+  }
+  btn.textContent = offText;
+  btn.classList.add('state-danger');
+}
+
 function masterSetManualToggleButton(id, running) {
   const btn = document.getElementById(id);
   if (!btn) return;
@@ -805,8 +824,8 @@ async function masterRefresh() {
     masterUiState.haLampRight = lampRightBool;
     masterUiState.haShopOpen = (speakersBothState === true && lampsBothState === true);
     masterSetShopButtonState(masterUiState.haShopOpen, true);
-    masterSetToggleButton('headHaSpeakersToggleBtn', speakersBothState, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
-    masterSetToggleButton('headHaLampsToggleBtn', lampsBothState, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
+    masterSetHeaderPowerButton('headHaSpeakersToggleBtn', speakersBothState === true, 'Speakers On', 'Speakers Off', true);
+    masterSetHeaderPowerButton('headHaLampsToggleBtn', lampsBothState === true, 'Lamps On', 'Lamps Off', true);
     masterSetPaletteState(ha.lamp_palette_last);
 
     const dimmer = document.getElementById('masterLampDimmer');
@@ -830,8 +849,8 @@ async function masterRefresh() {
     masterUiState.haLampRight = null;
     masterUiState.haShopOpen = false;
     masterSetShopButtonState(false, false);
-    masterSetToggleButton('headHaSpeakersToggleBtn', null, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
-    masterSetToggleButton('headHaLampsToggleBtn', null, 'BOTH ON', 'BOTH OFF', 'ONE/BOTH OFF');
+    masterSetHeaderPowerButton('headHaSpeakersToggleBtn', false, 'Speakers On', 'Speakers Off', false);
+    masterSetHeaderPowerButton('headHaLampsToggleBtn', false, 'Lamps On', 'Lamps Off', false);
     masterSetPaletteState('');
     masterSetStatePillButton('masterHaLampLeft', null);
     masterSetStatePillButton('masterHaLampRight', null);
@@ -1496,7 +1515,7 @@ def create_app(plugins: list[Any]) -> Flask:
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 14px;
+      gap: 24px;
       flex-wrap: wrap;
     }
     .head-quick-group {
@@ -1524,6 +1543,13 @@ def create_app(plugins: list[Any]) -> Flask:
       font-weight: 800;
       white-space: nowrap;
     }
+    .head-quick-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--sub);
+      flex: 0 0 auto;
+    }
     .head-quick-btn {
       min-height: 34px;
       padding: 7px 11px;
@@ -1533,7 +1559,7 @@ def create_app(plugins: list[Any]) -> Flask:
       box-shadow: none;
     }
     .head-shop-btn {
-      min-width: 128px;
+      min-width: 146px;
       justify-content: center;
     }
     .head-palette-row {
@@ -2191,12 +2217,12 @@ def create_app(plugins: list[Any]) -> Flask:
         <button id=\"headShopToggleBtn\" class=\"btn head-quick-btn head-shop-btn state-danger\" onclick=\"masterToggleShopMode()\">Shop Closed</button>
       </div>
       <div class=\"head-quick-group\">
-        <span class=\"head-quick-label\"><span class=\"material-symbols-rounded label-icon\">speaker</span>Speakers</span>
-        <button id=\"headHaSpeakersToggleBtn\" class=\"btn head-quick-btn state-action\" onclick=\"masterToggleHaSpeakers()\">--</button>
+        <span class=\"head-quick-icon material-symbols-rounded label-icon\" aria-hidden=\"true\">speaker</span>
+        <button id=\"headHaSpeakersToggleBtn\" class=\"btn head-quick-btn head-shop-btn state-danger\" onclick=\"masterToggleHaSpeakers()\">Speakers Off</button>
       </div>
       <div class=\"head-quick-group\">
-        <span class=\"head-quick-label\"><span class=\"material-symbols-rounded label-icon\">lightbulb</span>Lamps</span>
-        <button id=\"headHaLampsToggleBtn\" class=\"btn head-quick-btn state-action\" onclick=\"masterToggleHaLamps()\">--</button>
+        <span class=\"head-quick-icon material-symbols-rounded label-icon\" aria-hidden=\"true\">lightbulb</span>
+        <button id=\"headHaLampsToggleBtn\" class=\"btn head-quick-btn head-shop-btn state-danger\" onclick=\"masterToggleHaLamps()\">Lamps Off</button>
       </div>
       <div class=\"head-quick-group head-quick-group-palette\">
         <span class=\"head-quick-label\"><span class=\"material-symbols-rounded label-icon\">palette</span>Lamp Colors</span>
