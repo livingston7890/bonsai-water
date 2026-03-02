@@ -935,6 +935,12 @@ def settings_dashboard_html() -> str:
       <div class="panel-title" style="margin-bottom:0;">Hub Settings</div>
     </div>
     <div class="panel-meta">Updater, restart controls, and source configuration.</div>
+    <div class="row" style="margin-top:12px;">
+      <button id="settingsThemeToggleBtn" class="btn gray chip-btn" onclick="toggleTheme()">
+        <span id="settingsThemeToggleIcon" class="material-symbols-rounded" aria-hidden="true">dark_mode</span>
+        <span id="settingsThemeToggleText">Dark</span>
+      </button>
+    </div>
   </div>
 
   <div class="card">
@@ -1455,7 +1461,7 @@ def create_app(plugins: list[Any]) -> Flask:
     .app-head {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-start;
       gap: 14px;
       margin-bottom: 16px;
     }
@@ -1484,30 +1490,18 @@ def create_app(plugins: list[Any]) -> Flask:
       color: var(--sub);
       max-width: 740px;
     }
-    .head-actions {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      justify-content: flex-end;
-      flex-wrap: wrap;
-      flex: 0 0 auto;
-    }
-    .toolbar-row {
-      display: flex;
-      justify-content: flex-end;
-      margin: -4px 0 16px;
-    }
     .head-quickbar {
       flex: 1 1 auto;
       min-width: 0;
       display: flex;
       align-items: center;
-      justify-content: flex-start;
+      justify-content: center;
       gap: 14px;
       flex-wrap: wrap;
     }
     .head-quick-group {
       display: flex;
+      flex: 0 0 auto;
       align-items: center;
       gap: 8px;
       min-width: 0;
@@ -1517,7 +1511,7 @@ def create_app(plugins: list[Any]) -> Flask:
       flex: 0 0 auto;
     }
     .head-quick-group-palette {
-      flex: 1 1 430px;
+      flex: 0 1 auto;
     }
     .head-quick-label {
       display: inline-flex;
@@ -2154,13 +2148,7 @@ def create_app(plugins: list[Any]) -> Flask:
       .app-head { flex-direction: column; }
       .title { font-size: 30px; }
       .head-brand,
-      .head-quickbar,
-      .head-actions { width: 100%; }
-      .toolbar-row {
-        justify-content: flex-start;
-        margin: -4px 0 16px;
-      }
-      .head-actions { justify-content: flex-start; }
+      .head-quickbar { width: 100%; }
       .head-quick-group { width: 100%; }
       .head-quick-group-shop { flex-basis: 100%; }
       .head-quick-group-palette { flex-basis: 100%; }
@@ -2221,14 +2209,6 @@ def create_app(plugins: list[Any]) -> Flask:
       </div>
     </div>
   </header>
-  <div class=\"toolbar-row\">
-    <div class=\"head-actions\">
-      <button id=\"themeToggleBtn\" class=\"btn gray chip-btn\" onclick=\"toggleTheme()\">
-        <span id=\"themeToggleIcon\" class=\"material-symbols-rounded\" aria-hidden=\"true\">dark_mode</span>
-        <span id=\"themeToggleText\">Dark</span>
-      </button>
-    </div>
-  </div>
 
   <div class=\"layout\">
     <aside class=\"sidebar\">
@@ -2257,8 +2237,8 @@ function setTheme(theme) {
   const next = normalizeTheme(theme);
   document.documentElement.setAttribute('data-theme', next);
   try { localStorage.setItem('pi_hub_theme', next); } catch (err) {}
-  const icon = document.getElementById('themeToggleIcon');
-  const label = document.getElementById('themeToggleText');
+  const icon = document.getElementById('settingsThemeToggleIcon');
+  const label = document.getElementById('settingsThemeToggleText');
   if (icon) icon.textContent = next === 'dark' ? 'dark_mode' : 'light_mode';
   if (label) label.textContent = next === 'dark' ? 'Dark' : 'Light';
 }
