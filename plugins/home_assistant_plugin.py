@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Optional
 from urllib import error as urlerror
 from urllib import request as urlrequest
@@ -19,6 +20,9 @@ DEFAULT_CONFIG = {
     "ha_lamp_palette_last": "",
     "ha_lamp_brightness_last": 80,
 }
+
+LIGHT_COMMAND_RETRIES = 3
+LIGHT_VERIFY_DELAY_SECONDS = 0.45
 
 
 class HomeAssistantPlugin:
@@ -108,6 +112,112 @@ class HomeAssistantPlugin:
         if not ok:
             return False, data.get("error", "Request failed")
         return True, "OK"
+
+    @staticmethod
+    def _normalize_binary_state(value: object) -> str:
+        return str(value or "").strip().lower()
+
+    @staticmethod
+    def _brightness_to_ha(brightness_pct: int) -> int:
+        return max(1, min(255, int(round((max(1, min(100, brightness_pct)) / 100.0) * 255))))
+
+    @staticmethod
+    def _attrs_match_expected(attrs: dict, expected_attrs: Optional[dict]) -> tuple[bool, str]:
+        if not expected_attrs:
+            return True, "OK"
+
+        for key, expected in expected_attrs.items():
+            if expected is None or key not in attrs:
+                continue
+
+            actual = attrs.get(key)
+            if key == "rgb_color":
+                if not isinstance(actual, (list, tuple)) or len(actual) < 3:
+                    return False, "rgb_color unavailable"
+                try:
+                    actual_rgb = [int(actual[0]), int(actual[1]), int(actual[2])]
+                    expected_rgb = [int(expected[0]), int(expected[1]), int(expected[2])]
+                except Exception:
+                    return False, "rgb_color unavailable"
+                if actual_rgb != expected_rgb:
+                    return False, f"rgb_color is {actual_rgb}"
+                continue
+
+            if key == "brightness":
+                try:
+                    if abs(int(actual) - int(expected)) > 20:
+                        return False, f"brightness is {actual}"
+                except Exception:
+                    return False, "brightness unavailable"
+                continue
+
+            if key == "color_temp":
+                try:
+                    if abs(int(actual) - int(expected)) > 8:
+                        return False, f"color_temp is {actual}"
+                except Exception:
+                    return False, "color_temp unavailable"
+                continue
+
+            if str(actual).strip() != str(expected).strip():
+                return False, f"{key} is {actual}"
+
+        return True, "OK"
+
+    def _verify_light_result(
+        self,
+        entity_id: str,
+        expected_state: Optional[str] = None,
+        expected_attrs: Optional[dict] = None,
+    ) -> tuple[bool, str]:
+        ok, data = self._entity_data(entity_id)
+        if not ok:
+            return False, data.get("error", "Request failed")
+
+        current_state = self._normalize_binary_state(data.get("state", "unknown"))
+        if expected_state:
+            desired_state = self._normalize_binary_state(expected_state)
+            if current_state != desired_state:
+                return False, f"state is {current_state or 'unknown'}"
+
+        attrs = data.get("attributes") if isinstance(data.get("attributes"), dict) else {}
+        return self._attrs_match_expected(attrs, expected_attrs)
+
+    def _call_light_service_checked(
+        self,
+        service: str,
+        entity_id: str,
+        extra: Optional[dict] = None,
+        expected_state: Optional[str] = None,
+        expected_attrs: Optional[dict] = None,
+        retries: int = LIGHT_COMMAND_RETRIES,
+        settle_delay: float = LIGHT_VERIFY_DELAY_SECONDS,
+    ) -> tuple[bool, str]:
+        attempts = max(1, int(retries))
+        pause = max(0.1, float(settle_delay))
+        last_error = "Request failed"
+
+        for attempt in range(attempts):
+            ok, message = self._call_service("light", service, entity_id, extra=extra)
+            if not ok:
+                last_error = message
+            elif expected_state or expected_attrs:
+                time.sleep(pause)
+                verified, verify_message = self._verify_light_result(
+                    entity_id,
+                    expected_state=expected_state,
+                    expected_attrs=expected_attrs,
+                )
+                if verified:
+                    return True, "OK"
+                last_error = verify_message
+            else:
+                return True, "OK"
+
+            if attempt + 1 < attempts:
+                time.sleep(pause)
+
+        return False, last_error
 
     @staticmethod
     def _clamp_brightness(value: object, default: int = 80) -> int:
@@ -261,7 +371,12 @@ class HomeAssistantPlugin:
 
         if not entity_id:
             return False, f"Set {label} entity first."
-        return self._call_service("light", "turn_on" if on else "turn_off", entity_id)
+        return self._call_light_service_checked(
+            "turn_on" if on else "turn_off",
+            entity_id,
+            expected_state="on" if on else "off",
+            settle_delay=0.35,
+        )
 
     def set_lamps(self, on: bool) -> tuple[bool, str]:
         entities = self._resolve_lamp_entities()
@@ -269,7 +384,12 @@ class HomeAssistantPlugin:
             return False, "Set floor lamp entity IDs first."
         failures: list[str] = []
         for entity_id in entities:
-            ok, message = self._call_service("light", "turn_on" if on else "turn_off", entity_id)
+            ok, message = self._call_light_service_checked(
+                "turn_on" if on else "turn_off",
+                entity_id,
+                expected_state="on" if on else "off",
+                settle_delay=0.35,
+            )
             if not ok:
                 failures.append(f"{entity_id}: {message}")
         if failures:
@@ -306,6 +426,7 @@ class HomeAssistantPlugin:
             return False, "Set floor lamp entity IDs first."
 
         brightness = self._clamp_brightness(self.config.get("ha_lamp_brightness_last", 80))
+        expected_brightness = self._brightness_to_ha(brightness)
         if palette_name == "warm":
             colors = [(255, 80, 20), (255, 110, 28), (255, 125, 16), (255, 145, 40)]
             label = "Warm"
@@ -340,11 +461,22 @@ class HomeAssistantPlugin:
                     "brightness_pct": brightness,
                     "transition": 0.6,
                 }
-            ok, message = self._call_service(
-                "light",
+                expected_attrs = {
+                    "rgb_color": [int(color[0]), int(color[1]), int(color[2])],
+                    "brightness": expected_brightness,
+                }
+            if use_color_temp:
+                expected_attrs = {
+                    "color_temp": 454,
+                    "brightness": expected_brightness,
+                }
+            ok, message = self._call_light_service_checked(
                 "turn_on",
                 entity_id,
                 extra=extra,
+                expected_state="on",
+                expected_attrs=expected_attrs,
+                settle_delay=0.8,
             )
             if not ok:
                 failures.append(f"{entity_id}: {message}")
@@ -367,11 +499,13 @@ class HomeAssistantPlugin:
 
         failures: list[str] = []
         for entity_id in entities:
-            ok, message = self._call_service(
-                "light",
+            ok, message = self._call_light_service_checked(
                 "turn_on",
                 entity_id,
                 extra={"effect": effect_name, "transition": 0.4},
+                expected_state="on",
+                expected_attrs={"effect": effect_name},
+                settle_delay=0.6,
             )
             if not ok:
                 failures.append(f"{entity_id}: {message}")
@@ -386,13 +520,16 @@ class HomeAssistantPlugin:
             return False, "Set floor lamp entity IDs first."
 
         brightness = self._clamp_brightness(brightness_pct)
+        expected_brightness = self._brightness_to_ha(brightness)
         failures: list[str] = []
         for entity_id in entities:
-            ok, message = self._call_service(
-                "light",
+            ok, message = self._call_light_service_checked(
                 "turn_on",
                 entity_id,
                 extra={"brightness_pct": brightness, "transition": 0.4},
+                expected_state="on",
+                expected_attrs={"brightness": expected_brightness},
+                settle_delay=0.6,
             )
             if not ok:
                 failures.append(f"{entity_id}: {message}")
