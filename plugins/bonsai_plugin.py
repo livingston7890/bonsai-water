@@ -21,8 +21,9 @@ except Exception:
     Seesaw = None
 
 
-# Waveshare relay HAT mapping in this build: CH1 -> BCM GPIO25.
-RELAY_PIN = 25
+# Relay HAT silk labels are wiringPi-style (P25/P24/P23).
+# CH1 jumper on P25 maps to BCM GPIO26.
+RELAY_PIN = 26
 PUMP_ON_LEVEL = GPIO.LOW if GPIO else 0
 PUMP_OFF_LEVEL = GPIO.HIGH if GPIO else 1
 SOIL_SENSOR_ADDR = 0x36
@@ -30,12 +31,20 @@ SOIL_SENSOR_ADDR = 0x36
 DEFAULT_CONFIG = {
     "moisture_threshold_low": 35,
     "moisture_threshold_high": 65,
+    "moisture_raw_dry": 300,
+    "moisture_raw_wet": 1000,
+    "moisture_sample_count": 7,
+    "moisture_sample_delay_ms": 40,
+    "moisture_ema_alpha": 0.35,
     "watering_duration_seconds": 60,
     "min_water_interval_seconds": 28800,
     "sensor_read_interval_seconds": 300,
     "pump_max_runtime_seconds": 120,
     "manual_max_runtime_seconds": 30,
     "auto_watering_enabled": True,
+    "office_hours_enabled": False,
+    "office_hours_start_hour": 17,
+    "office_hours_end_hour": 2,
     "oled_enabled": True,
 }
 
@@ -63,6 +72,7 @@ class BonsaiPlugin:
         self._save_config(self.config)
 
         self.current_moisture: Optional[float] = None
+        self.current_moisture_raw: Optional[int] = None
         self.last_watered: Optional[str] = None
         self.last_water_time: float = 0.0
 
@@ -73,6 +83,7 @@ class BonsaiPlugin:
         self._pump_stop_requested = threading.Event()
 
         self.monitor_thread: Optional[threading.Thread] = None
+        self.pump_thread: Optional[threading.Thread] = None
         self.sensor: Optional[object] = None
         self.display = None
         self.gpio_ready = False
@@ -119,8 +130,26 @@ class BonsaiPlugin:
             )
             """
         )
+        self._migrate_db(conn)
         conn.commit()
         conn.close()
+
+    @staticmethod
+    def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+        c = conn.cursor()
+        c.execute(f"PRAGMA table_info({table})")
+        existing = {str(row[1]) for row in c.fetchall()}
+        if column in existing:
+            return
+        c.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+    def _migrate_db(self, conn: sqlite3.Connection) -> None:
+        # Backward compatibility for older watering_events schema.
+        self._ensure_column(conn, "watering_events", "duration_seconds", "duration_seconds REAL NOT NULL DEFAULT 0")
+        self._ensure_column(conn, "watering_events", "moisture_before", "moisture_before REAL")
+        self._ensure_column(conn, "watering_events", "moisture_after", "moisture_after REAL")
+        self._ensure_column(conn, "watering_events", "mode", "mode TEXT NOT NULL DEFAULT 'manual'")
+        self._ensure_column(conn, "watering_events", "stop_reason", "stop_reason TEXT")
 
     def _log_moisture(self, moisture_percent: float) -> None:
         conn = sqlite3.connect(self.db_file)
@@ -141,24 +170,29 @@ class BonsaiPlugin:
         stop_reason: str,
     ) -> None:
         conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        c.execute(
-            """
-            INSERT INTO watering_events
-            (timestamp, duration_seconds, moisture_before, moisture_after, mode, stop_reason)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                datetime.now().isoformat(),
-                duration_seconds,
-                moisture_before,
-                moisture_after,
-                mode,
-                stop_reason,
-            ),
-        )
-        conn.commit()
-        conn.close()
+        try:
+            self._migrate_db(conn)
+            c = conn.cursor()
+            c.execute(
+                """
+                INSERT INTO watering_events
+                (timestamp, duration_seconds, moisture_before, moisture_after, mode, stop_reason)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    datetime.now().isoformat(),
+                    duration_seconds,
+                    moisture_before,
+                    moisture_after,
+                    mode,
+                    stop_reason,
+                ),
+            )
+            conn.commit()
+        except Exception as exc:
+            print(f"[BONSAI] Failed to log watering event: {exc}")
+        finally:
+            conn.close()
 
     def get_recent_readings(self, hours: int = 48) -> list[dict]:
         conn = sqlite3.connect(self.db_file)
@@ -174,18 +208,24 @@ class BonsaiPlugin:
 
     def get_recent_waterings(self, count: int = 20) -> list[dict]:
         conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        c.execute(
-            """
-            SELECT timestamp, duration_seconds, moisture_before, moisture_after, mode, stop_reason
-            FROM watering_events
-            ORDER BY timestamp DESC
-            LIMIT ?
-            """,
-            (count,),
-        )
-        rows = c.fetchall()
-        conn.close()
+        try:
+            self._migrate_db(conn)
+            c = conn.cursor()
+            c.execute(
+                """
+                SELECT timestamp, duration_seconds, moisture_before, moisture_after, mode, stop_reason
+                FROM watering_events
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (count,),
+            )
+            rows = c.fetchall()
+        except Exception as exc:
+            print(f"[BONSAI] Failed to fetch watering events: {exc}")
+            rows = []
+        finally:
+            conn.close()
         return [
             {
                 "timestamp": r[0],
@@ -197,6 +237,26 @@ class BonsaiPlugin:
             }
             for r in rows
         ]
+
+    def _reset_pump_state(self, stop_reason: str = "") -> None:
+        with self.lock:
+            self.pump.running = False
+            self.pump.mode = "idle"
+            self.pump.started_at = 0.0
+            self.pump.ends_at = 0.0
+            self.pump.stop_reason = stop_reason
+            self.manual_toggle_on = False
+            self._pump_stop_requested.clear()
+
+    def _reconcile_pump_worker_state(self) -> None:
+        with self.lock:
+            running = bool(self.pump.running)
+            thread = self.pump_thread
+
+        if running and thread is not None and not thread.is_alive():
+            print("[BONSAI] Pump worker was not alive while marked running; resetting state.")
+            self._set_pump_output(False)
+            self._reset_pump_state("worker_reset")
 
     def _setup_gpio(self) -> None:
         if GPIO is None:
@@ -245,24 +305,84 @@ class BonsaiPlugin:
         except Exception:
             return None
 
-    @staticmethod
-    def _convert_moisture(raw: int) -> float:
-        dry_value = 600
-        wet_value = 300
-        pct = (dry_value - raw) / (dry_value - wet_value) * 100
+    def _convert_moisture(self, raw: int) -> float:
+        dry_value = float(self.config.get("moisture_raw_dry", 300))
+        wet_value = float(self.config.get("moisture_raw_wet", 1000))
+        if wet_value == dry_value:
+            return 0.0
+
+        # Support either orientation:
+        # - Seesaw defaults: larger raw value = wetter
+        # - Some sensors: smaller raw value = wetter
+        if wet_value > dry_value:
+            pct = (float(raw) - dry_value) / (wet_value - dry_value) * 100.0
+        else:
+            pct = (dry_value - float(raw)) / (dry_value - wet_value) * 100.0
         pct = max(0, min(100, pct))
         return round(pct, 1)
 
-    def _read_moisture(self) -> Optional[float]:
+    @staticmethod
+    def _trimmed_average(values: list[int]) -> int:
+        if not values:
+            raise ValueError("No values to average.")
+        ordered = sorted(int(v) for v in values)
+        if len(ordered) >= 5:
+            ordered = ordered[1:-1]
+        return int(round(sum(ordered) / len(ordered)))
+
+    def _read_moisture(self, use_smoothing: bool = True) -> Optional[float]:
         sensor = self._get_sensor()
         if sensor is None:
             return None
         try:
-            raw = sensor.moisture_read()
-            return self._convert_moisture(raw)
+            sample_count = max(1, min(25, int(self.config.get("moisture_sample_count", 7))))
+            sample_delay = max(0.0, min(0.3, float(self.config.get("moisture_sample_delay_ms", 40)) / 1000.0))
+            samples: list[int] = []
+            for idx in range(sample_count):
+                try:
+                    samples.append(int(sensor.moisture_read()))
+                except Exception:
+                    # Keep best-effort sample set; if none collected we surface failure below.
+                    pass
+                if idx + 1 < sample_count and sample_delay > 0:
+                    time.sleep(sample_delay)
+
+            if not samples:
+                raise RuntimeError("No moisture samples received.")
+
+            raw_filtered = self._trimmed_average(samples)
+            self.current_moisture_raw = raw_filtered
+            measured_pct = self._convert_moisture(raw_filtered)
+
+            if not use_smoothing:
+                return measured_pct
+
+            alpha = max(0.05, min(1.0, float(self.config.get("moisture_ema_alpha", 0.35))))
+            with self.lock:
+                previous = self.current_moisture
+
+            if previous is None:
+                return measured_pct
+
+            delta = abs(measured_pct - previous)
+            if delta >= 20:
+                alpha = max(alpha, 0.8)
+            elif delta >= 10:
+                alpha = max(alpha, 0.6)
+
+            smoothed = previous + (measured_pct - previous) * alpha
+            return round(smoothed, 1)
         except Exception:
             self.sensor = None
+            self.current_moisture_raw = None
             return None
+
+    def _record_moisture_sample(self, moisture: Optional[float]) -> None:
+        if moisture is None:
+            return
+        with self.lock:
+            self.current_moisture = moisture
+        self._log_moisture(moisture)
 
     def _update_display(self, status: str) -> None:
         if self.display is None:
@@ -327,13 +447,12 @@ class BonsaiPlugin:
             self.pump.ends_at = self.pump.started_at + run_seconds
             self.pump.stop_reason = ""
 
-        self._set_pump_output(True)
-        print(f"[BONSAI] Pump {mode.upper()} start, target {run_seconds}s")
-
         started = time.time()
         stop_reason = "completed"
 
         try:
+            self._set_pump_output(True)
+            print(f"[BONSAI] Pump {mode.upper()} start, target {run_seconds}s")
             while not self._shutdown.is_set():
                 if self._pump_stop_requested.is_set():
                     stop_reason = "manual_stop"
@@ -342,22 +461,22 @@ class BonsaiPlugin:
                     stop_reason = "safety_timeout" if mode == "manual" else "completed"
                     break
                 time.sleep(0.1)
+        except Exception as exc:
+            stop_reason = f"error:{exc.__class__.__name__}"
+            print(f"[BONSAI] Pump worker error: {exc}")
         finally:
-            self._set_pump_output(False)
+            try:
+                self._set_pump_output(False)
+            except Exception as exc:
+                print(f"[BONSAI] Pump output reset failed: {exc}")
             elapsed = round(time.time() - started, 1)
-            moisture_after = self._read_moisture()
+            moisture_after = self._read_moisture(use_smoothing=False)
+            self._record_moisture_sample(moisture_after)
             self._log_watering(elapsed, moisture_before, moisture_after, mode, stop_reason)
-
             with self.lock:
                 self.last_watered = datetime.now().strftime("%H:%M")
                 self.last_water_time = time.time()
-                self.pump.running = False
-                self.pump.mode = "idle"
-                self.pump.started_at = 0.0
-                self.pump.ends_at = 0.0
-                self.pump.stop_reason = stop_reason
-                self.manual_toggle_on = False
-                self._pump_stop_requested.clear()
+            self._reset_pump_state(stop_reason)
 
             print(f"[BONSAI] Pump stop ({stop_reason}), ran {elapsed}s")
 
@@ -365,21 +484,48 @@ class BonsaiPlugin:
         if not self.gpio_ready:
             return False, "GPIO not ready; pump control unavailable."
 
+        self._reconcile_pump_worker_state()
         with self.lock:
             if self.pump.running:
                 return False, "Pump already running"
             moisture_before = self.current_moisture
+            self._pump_stop_requested.clear()
 
         t = threading.Thread(
             target=self._pump_worker,
             args=(mode, seconds, moisture_before),
             daemon=True,
         )
+        with self.lock:
+            self.pump_thread = t
         t.start()
         return True, "Pump started"
 
     def stop_pump(self) -> None:
         self._pump_stop_requested.set()
+
+    def _is_office_hours_blocked(self, at: Optional[datetime] = None) -> bool:
+        with self.lock:
+            enabled = bool(self.config.get("office_hours_enabled", False))
+            try:
+                start_hour = int(self.config.get("office_hours_start_hour", 17)) % 24
+            except Exception:
+                start_hour = 17
+            try:
+                end_hour = int(self.config.get("office_hours_end_hour", 2)) % 24
+            except Exception:
+                end_hour = 2
+
+        if not enabled:
+            return False
+        if start_hour == end_hour:
+            return True
+
+        now = at or datetime.now()
+        hour_value = now.hour + (now.minute / 60.0) + (now.second / 3600.0)
+        if start_hour < end_hour:
+            return start_hour <= hour_value < end_hour
+        return hour_value >= start_hour or hour_value < end_hour
 
     def monitor_loop(self) -> None:
         print("[BONSAI] monitor loop started")
@@ -389,9 +535,7 @@ class BonsaiPlugin:
 
             moisture = self._read_moisture()
             if moisture is not None:
-                with self.lock:
-                    self.current_moisture = moisture
-                self._log_moisture(moisture)
+                self._record_moisture_sample(moisture)
                 print(f"[BONSAI] Moisture: {moisture}%")
 
             status = "WAIT"
@@ -419,7 +563,8 @@ class BonsaiPlugin:
                     interval_ok = (now - self.last_water_time) >= cfg["min_water_interval_seconds"]
                     idle = not self.pump.running
                 needs_water = m < cfg["moisture_threshold_low"]
-                if needs_water and interval_ok and idle:
+                blocked_by_hours = self._is_office_hours_blocked()
+                if needs_water and interval_ok and idle and not blocked_by_hours:
                     self.start_pump("auto", int(cfg["watering_duration_seconds"]))
 
             sleep_seconds = max(30, int(cfg["sensor_read_interval_seconds"]))
@@ -459,6 +604,7 @@ class BonsaiPlugin:
 
         @app.route("/api/bonsai/status")
         def bonsai_api_status():
+            self._reconcile_pump_worker_state()
             with self.lock:
                 now = time.time()
                 remaining = 0
@@ -467,12 +613,14 @@ class BonsaiPlugin:
                 return jsonify(
                     {
                         "moisture": self.current_moisture,
+                        "moisture_raw": self.current_moisture_raw,
                         "last_watered": self.last_watered,
                         "manual_toggle_on": self.manual_toggle_on,
                         "config": self.config,
                         "gpio_ready": self.gpio_ready,
                         "display_ready": self.display is not None,
                         "oled_enabled": bool(self.config.get("oled_enabled", True)),
+                        "office_hours_blocking_now": self._is_office_hours_blocked(),
                         "pump": {
                             "running": self.pump.running,
                             "mode": self.pump.mode,
@@ -488,12 +636,20 @@ class BonsaiPlugin:
             allowed = {
                 "moisture_threshold_low",
                 "moisture_threshold_high",
+                "moisture_raw_dry",
+                "moisture_raw_wet",
+                "moisture_sample_count",
+                "moisture_sample_delay_ms",
+                "moisture_ema_alpha",
                 "watering_duration_seconds",
                 "min_water_interval_seconds",
                 "sensor_read_interval_seconds",
                 "pump_max_runtime_seconds",
                 "manual_max_runtime_seconds",
                 "auto_watering_enabled",
+                "office_hours_enabled",
+                "office_hours_start_hour",
+                "office_hours_end_hour",
             }
             with self.lock:
                 for key, value in payload.items():
@@ -511,12 +667,35 @@ class BonsaiPlugin:
                 self._save_config(self.config)
             return jsonify({"ok": True, "auto_watering_enabled": enabled})
 
+        @app.route("/api/bonsai/office_hours", methods=["POST"])
+        def bonsai_api_office_hours():
+            payload = request.get_json(force=True)
+            enabled = bool(payload.get("enabled", False))
+            with self.lock:
+                self.config["office_hours_enabled"] = enabled
+                self._save_config(self.config)
+            return jsonify(
+                {
+                    "ok": True,
+                    "office_hours_enabled": enabled,
+                    "office_hours_blocking_now": self._is_office_hours_blocked(),
+                    "window": "5PM to 2AM",
+                }
+            )
+
         @app.route("/api/bonsai/manual_toggle", methods=["POST"])
         def bonsai_api_manual_toggle():
             payload = request.get_json(force=True)
             enabled = bool(payload.get("enabled", False))
 
             if enabled:
+                with self.lock:
+                    pump_running = bool(self.pump.running)
+                if pump_running:
+                    self.stop_pump()
+                    with self.lock:
+                        self.manual_toggle_on = False
+                    return jsonify({"ok": True, "message": "Pump stop requested."})
                 with self.lock:
                     self.manual_toggle_on = True
                 ok, message = self.start_pump("manual", int(self.config["manual_max_runtime_seconds"]))
@@ -530,6 +709,21 @@ class BonsaiPlugin:
             with self.lock:
                 self.manual_toggle_on = False
             return jsonify({"ok": True, "message": "Manual pump stop requested."})
+
+        @app.route("/api/bonsai/read_now", methods=["POST"])
+        def bonsai_api_read_now():
+            moisture = self._read_moisture(use_smoothing=False)
+            self._record_moisture_sample(moisture)
+            if moisture is None:
+                return jsonify({"ok": False, "message": "Moisture read failed. Check sensor wiring.", "moisture": None})
+            return jsonify(
+                {
+                    "ok": True,
+                    "message": f"Moisture refreshed: {moisture}%",
+                    "moisture": moisture,
+                    "moisture_raw": self.current_moisture_raw,
+                }
+            )
 
         @app.route("/api/bonsai/readings")
         def bonsai_api_readings():
@@ -593,9 +787,18 @@ class BonsaiPlugin:
     <div class="row">
       <span class="panel-title" style="margin-bottom:0;"><span class="material-symbols-rounded label-icon">play_circle</span>Manual Pump Run</span>
       <button id="bonsaiManualBtn" class="btn control-btn" onclick="bonsaiToggleManual()">Loading...</button>
-      <span class="small muted">Stops on toggle-off or at 30s safety max.</span>
+      <span class="small muted">Stops any active run, including auto, or starts a manual run.</span>
     </div>
     <div id="bonsaiManualMsg" class="small muted" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <span class="panel-title" style="margin-bottom:0;"><span class="material-symbols-rounded label-icon">sensors</span>Moisture Read</span>
+      <button id="bonsaiReadNowBtn" class="btn control-btn state-action" onclick="bonsaiReadNow()">READ NOW</button>
+      <span id="bonsaiReadMsg" class="small muted"></span>
+    </div>
+    <div class="small muted" style="margin-top:8px;">Forces an immediate sample without waiting for the next interval.</div>
   </div>
 
   <div class="card">
@@ -691,7 +894,7 @@ async function bonsaiRefreshStatus() {
   autoBtn.classList.toggle('state-on', autoOn);
   autoBtn.classList.toggle('state-off', !autoOn);
 
-  const manualRunning = !!st.manual_toggle_on || (st.pump.running && st.pump.mode === 'manual');
+  const manualRunning = !!(st.pump && st.pump.running);
   const manualBtn = document.getElementById('bonsaiManualBtn');
   manualBtn.textContent = manualRunning ? 'STOP' : 'START';
   manualBtn.classList.toggle('state-danger', manualRunning);
@@ -729,7 +932,7 @@ async function bonsaiToggleAuto() {
 }
 
 async function bonsaiToggleManual() {
-  const running = !!(bonsaiState && (bonsaiState.manual_toggle_on || (bonsaiState.pump && bonsaiState.pump.running && bonsaiState.pump.mode === 'manual')));
+  const running = !!(bonsaiState && bonsaiState.pump && bonsaiState.pump.running);
   const enabled = !running;
   const r = await api('/api/bonsai/manual_toggle', {
     method: 'POST',
@@ -740,6 +943,25 @@ async function bonsaiToggleManual() {
   setTimeout(() => document.getElementById('bonsaiManualMsg').textContent = '', 2500);
   await bonsaiRefreshStatus();
   await bonsaiRefreshWaterings();
+}
+
+async function bonsaiReadNow() {
+  try {
+    const r = await api('/api/bonsai/read_now', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({})
+    });
+    document.getElementById('bonsaiReadMsg').textContent = r.message || 'Moisture refreshed.';
+  } catch (err) {
+    const raw = String((err && err.message) ? err.message : (err || 'Unknown error'));
+    const msg = (raw.includes('404') || raw.includes('Not Found'))
+      ? 'Read endpoint missing on running server. Update Modules and restart.'
+      : ('Read failed: ' + raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+    document.getElementById('bonsaiReadMsg').textContent = msg;
+  }
+  setTimeout(() => document.getElementById('bonsaiReadMsg').textContent = '', 2200);
+  await bonsaiRefreshStatus();
 }
 
 async function bonsaiSaveSettings() {

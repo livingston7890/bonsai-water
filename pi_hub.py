@@ -266,7 +266,7 @@ def master_dashboard_html() -> str:
         </div>
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">water_drop</span>Auto watering</span>
-          <span id="masterBonsaiAuto" class="master-state neutral">--</span>
+          <button id="masterBonsaiAuto" type="button" class="master-state master-state-btn neutral" onclick="masterToggleBonsaiAuto()">--</button>
         </div>
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">view_in_ar</span>OLED</span>
@@ -283,12 +283,16 @@ def master_dashboard_html() -> str:
       </div>
       <div class="master-controls">
         <div class="master-control-group">
-          <span class="master-control-label"><span class="material-symbols-rounded label-icon">water_drop</span>Auto Watering</span>
-          <button id="masterBonsaiAutoToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleBonsaiAuto()">--</button>
+          <span class="master-control-label"><span class="material-symbols-rounded label-icon">sensors</span>Moisture</span>
+          <button id="masterBonsaiReadNowBtn" class="btn master-mini-btn state-action" onclick="masterReadBonsaiNow()">READ NOW</button>
         </div>
         <div class="master-control-group">
           <span class="master-control-label"><span class="material-symbols-rounded label-icon">play_circle</span>Manual Pump</span>
           <button id="masterBonsaiManualToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleBonsaiManual()">--</button>
+        </div>
+        <div class="master-control-group">
+          <span class="master-control-label"><span class="material-symbols-rounded label-icon">schedule</span>Office Hours (5PM to 2AM)</span>
+          <button id="masterBonsaiOfficeHoursBtn" class="btn master-mini-btn state-off" onclick="masterToggleBonsaiOfficeHours()">--</button>
         </div>
       </div>
     </div>
@@ -499,10 +503,16 @@ function masterSetHeaderPowerButton(id, isOn, onText, offText, enabled=true) {
   btn.classList.add('state-danger');
 }
 
-function masterSetManualToggleButton(id, running) {
+function masterSetManualToggleButton(id, running, enabled=true) {
   const btn = document.getElementById(id);
   if (!btn) return;
+  btn.disabled = !enabled;
   btn.classList.remove('state-on', 'state-off', 'state-action', 'state-danger');
+  if (!enabled) {
+    btn.textContent = 'N/A';
+    btn.classList.add('state-off');
+    return;
+  }
   if (running === true) {
     btn.textContent = 'STOP';
     btn.classList.add('state-danger');
@@ -552,6 +562,7 @@ const masterUiState = {
   bonsaiAuto: null,
   bonsaiManual: null,
   bonsaiOled: null,
+  bonsaiOfficeHours: null,
   piholeBlocking: null,
 };
 let masterDimmerDebounceTimer = null;
@@ -570,6 +581,15 @@ function masterNotify(message, isError=false) {
   }, 3200);
 }
 
+function masterFormatError(err) {
+  const raw = String((err && err.message) ? err.message : (err || 'Unknown error'));
+  if (raw.includes('404') || raw.includes('Not Found')) {
+    return 'Endpoint not found on running server. Run Update Modules and restart Pi Control Hub.';
+  }
+  const stripped = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return stripped || raw;
+}
+
 async function masterPost(path, payload) {
   return api(path, {
     method: 'POST',
@@ -584,7 +604,7 @@ async function masterRunAction(label, actionFn) {
     const msg = response && (response.message || response.msg || response.error);
     masterNotify(msg || (label + ' updated.'));
   } catch (err) {
-    masterNotify(label + ' failed: ' + err.message, true);
+    masterNotify(label + ' failed: ' + masterFormatError(err), true);
   }
   masterCachedPihole = null;
   await masterRefresh();
@@ -676,10 +696,24 @@ async function masterSetBonsaiManual(enabled) {
   );
 }
 
+async function masterSetBonsaiReadNow() {
+  await masterRunAction(
+    'Moisture read',
+    () => masterPost('/api/bonsai/read_now', {})
+  );
+}
+
 async function masterSetBonsaiOled(enabled) {
   await masterRunAction(
     enabled ? 'OLED ON' : 'OLED OFF',
     () => masterPost('/api/bonsai/oled', {enabled: !!enabled})
+  );
+}
+
+async function masterSetBonsaiOfficeHours(enabled) {
+  await masterRunAction(
+    enabled ? 'Office Hours Enabled' : 'Office Hours Disabled',
+    () => masterPost('/api/bonsai/office_hours', {enabled: !!enabled})
   );
 }
 
@@ -728,9 +762,18 @@ async function masterToggleBonsaiManual() {
   await masterSetBonsaiManual(target);
 }
 
+async function masterReadBonsaiNow() {
+  await masterSetBonsaiReadNow();
+}
+
 async function masterToggleBonsaiOled() {
   const target = masterUiState.bonsaiOled === true ? false : true;
   await masterSetBonsaiOled(target);
+}
+
+async function masterToggleBonsaiOfficeHours() {
+  const target = masterUiState.bonsaiOfficeHours === true ? false : true;
+  await masterSetBonsaiOfficeHours(target);
 }
 
 async function masterTogglePiholeBlocking() {
@@ -837,29 +880,41 @@ async function masterRefresh() {
     masterSetText('masterBonsaiPumpRemaining', remaining);
 
     const autoOn = !!(bonsai.config && bonsai.config.auto_watering_enabled);
+    const officeHoursEnabled = !!(bonsai.config && bonsai.config.office_hours_enabled);
     masterSetText('masterAutoWaterKpi', autoOn ? 'ON' : 'OFF');
     masterSetText('masterLastWatered', 'Last: ' + String(bonsai.last_watered || '--'));
-    masterSetReadOnlyState('masterBonsaiAuto', autoOn ? 'on' : 'off');
+    masterSetStatePillButton('masterBonsaiAuto', autoOn ? 'on' : 'off');
     masterSetStatePillButton('masterBonsaiOled', bonsai.oled_enabled ? 'on' : 'off');
     masterSetReadOnlyState('masterBonsaiGpio', bonsai.gpio_ready ? 'on' : 'off', 'READY', 'OFFLINE', 'UNKNOWN');
 
     const low = bonsai.config ? bonsai.config.moisture_threshold_low : '--';
     const high = bonsai.config ? bonsai.config.moisture_threshold_high : '--';
     masterSetText('masterBonsaiThresholds', low + '% / ' + high + '%');
-    const manualRunning = pumpRunning && String(bonsai.pump.mode || '') === 'manual';
+    const manualRunning = pumpRunning;
     masterUiState.bonsaiAuto = autoOn;
     masterUiState.bonsaiOled = !!bonsai.oled_enabled;
     masterUiState.bonsaiManual = manualRunning;
-    masterSetToggleButton('masterBonsaiAutoToggleBtn', autoOn, 'ON', 'OFF', 'N/A');
-    masterSetManualToggleButton('masterBonsaiManualToggleBtn', manualRunning);
+    masterUiState.bonsaiOfficeHours = officeHoursEnabled;
+    masterSetManualToggleButton('masterBonsaiManualToggleBtn', manualRunning, true);
+    masterSetToggleButton('masterBonsaiOfficeHoursBtn', officeHoursEnabled, 'Enabled', 'Disabled', 'N/A');
+    const readNowBtn = document.getElementById('masterBonsaiReadNowBtn');
+    if (readNowBtn) readNowBtn.disabled = false;
+    const officeHoursBtn = document.getElementById('masterBonsaiOfficeHoursBtn');
+    if (officeHoursBtn) officeHoursBtn.disabled = false;
   } else {
     masterSetConnPill('masterConnBonsai', false, 'Unavailable');
     masterUiState.bonsaiAuto = null;
     masterUiState.bonsaiOled = null;
     masterUiState.bonsaiManual = null;
-    masterSetToggleButton('masterBonsaiAutoToggleBtn', null, 'ON', 'OFF', 'N/A');
+    masterUiState.bonsaiOfficeHours = null;
+    masterSetStatePillButton('masterBonsaiAuto', null);
     masterSetStatePillButton('masterBonsaiOled', null);
-    masterSetManualToggleButton('masterBonsaiManualToggleBtn', false);
+    masterSetManualToggleButton('masterBonsaiManualToggleBtn', false, false);
+    masterSetToggleButton('masterBonsaiOfficeHoursBtn', null, 'Enabled', 'Disabled', 'N/A');
+    const readNowBtn = document.getElementById('masterBonsaiReadNowBtn');
+    if (readNowBtn) readNowBtn.disabled = true;
+    const officeHoursBtn = document.getElementById('masterBonsaiOfficeHoursBtn');
+    if (officeHoursBtn) officeHoursBtn.disabled = true;
   }
 
   if (pihole) {
@@ -2491,7 +2546,14 @@ async function updateHubModules(alreadyPrompted=false) {
             )
 
         try:
-            status = bonsai.get_status() if callable(getattr(bonsai, "get_status", None)) else {}
+            if callable(getattr(bonsai, "get_status", None)):
+                status = bonsai.get_status()
+            else:
+                status = {
+                    "gpio_ready": bool(getattr(bonsai, "gpio_ready", False)),
+                    "display_ready": bool(getattr(bonsai, "display", None) is not None),
+                    "moisture": getattr(bonsai, "current_moisture", None),
+                }
         except Exception as exc:
             return jsonify(
                 {
