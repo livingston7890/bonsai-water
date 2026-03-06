@@ -37,6 +37,8 @@ DEFAULT_CONFIG = {
     "moisture_sample_delay_ms": 40,
     "moisture_ema_alpha": 0.35,
     "watering_duration_seconds": 60,
+    "auto_pulse_seconds": 15,
+    "auto_soak_seconds": 90,
     "min_water_interval_seconds": 28800,
     "sensor_read_interval_seconds": 300,
     "pump_max_runtime_seconds": 120,
@@ -501,8 +503,167 @@ class BonsaiPlugin:
         t.start()
         return True, "Pump started"
 
+    def start_auto_cycle(self, total_budget_seconds: int) -> tuple[bool, str]:
+        if not self.gpio_ready:
+            return False, "GPIO not ready; pump control unavailable."
+
+        self._reconcile_pump_worker_state()
+        with self.lock:
+            if self.pump.running:
+                return False, "Pump already running"
+            moisture_before = self.current_moisture
+            self._pump_stop_requested.clear()
+
+        t = threading.Thread(
+            target=self._auto_pulse_worker,
+            args=(total_budget_seconds, moisture_before),
+            daemon=True,
+        )
+        with self.lock:
+            self.pump_thread = t
+        t.start()
+        return True, "Auto watering session started"
+
     def stop_pump(self) -> None:
         self._pump_stop_requested.set()
+
+    def _sleep_interruptible(self, seconds: int) -> bool:
+        deadline = time.time() + max(0, int(seconds))
+        while not self._shutdown.is_set() and time.time() < deadline:
+            if self._pump_stop_requested.is_set():
+                return False
+            time.sleep(0.1)
+        return not self._shutdown.is_set()
+
+    def _auto_pulse_worker(self, total_budget_seconds: int, moisture_before: Optional[float]) -> None:
+        max_auto = int(self.config["pump_max_runtime_seconds"])
+        total_budget = max(1, min(int(total_budget_seconds), max_auto))
+        pulse_seconds_default = max(1, int(self.config.get("auto_pulse_seconds", 15)))
+        soak_seconds = max(10, int(self.config.get("auto_soak_seconds", 90)))
+        target_moisture = float(self.config.get("moisture_threshold_high", 65))
+
+        with self.lock:
+            self.pump.running = True
+            self.pump.mode = "auto-pulse"
+            self.pump.started_at = time.time()
+            self.pump.ends_at = self.pump.started_at + min(total_budget, pulse_seconds_default)
+            self.pump.stop_reason = ""
+
+        remaining_budget = total_budget
+        pulse_count = 0
+        total_watered_seconds = 0.0
+        final_reason = "session_budget_reached"
+        last_moisture = moisture_before
+
+        try:
+            while remaining_budget > 0 and not self._shutdown.is_set():
+                if self._pump_stop_requested.is_set():
+                    final_reason = "manual_stop"
+                    break
+                if self._is_office_hours_blocked():
+                    final_reason = "office_hours_blocked"
+                    break
+                if last_moisture is not None and last_moisture >= target_moisture:
+                    final_reason = "target_reached"
+                    break
+
+                pulse_count += 1
+                pulse_seconds = min(remaining_budget, pulse_seconds_default)
+
+                with self.lock:
+                    now = time.time()
+                    self.pump.mode = f"auto-pulse {pulse_count}"
+                    self.pump.ends_at = now + pulse_seconds
+                    self.pump.stop_reason = ""
+
+                pulse_started = time.time()
+                pulse_reason = "pulse_complete"
+
+                try:
+                    self._set_pump_output(True)
+                    print(
+                        f"[BONSAI] Auto pulse {pulse_count} start, "
+                        f"{pulse_seconds}s (remaining budget before pulse: {remaining_budget}s)"
+                    )
+                    while not self._shutdown.is_set():
+                        if self._pump_stop_requested.is_set():
+                            pulse_reason = "manual_stop"
+                            final_reason = "manual_stop"
+                            break
+                        if time.time() >= pulse_started + pulse_seconds:
+                            break
+                        time.sleep(0.1)
+                finally:
+                    try:
+                        self._set_pump_output(False)
+                    except Exception as exc:
+                        print(f"[BONSAI] Pump output reset failed: {exc}")
+
+                elapsed = round(time.time() - pulse_started, 1)
+                remaining_budget = max(0, remaining_budget - pulse_seconds)
+                total_watered_seconds += elapsed
+                moisture_after_pulse = self._read_moisture(use_smoothing=False)
+                self._record_moisture_sample(moisture_after_pulse)
+
+                if moisture_after_pulse is None:
+                    pulse_reason = "sensor_read_failed"
+                    final_reason = "sensor_read_failed"
+                elif moisture_after_pulse >= target_moisture:
+                    pulse_reason = "target_reached"
+                    final_reason = "target_reached"
+                elif remaining_budget <= 0:
+                    pulse_reason = "session_budget_reached"
+                    final_reason = "session_budget_reached"
+
+                self._log_watering(elapsed, last_moisture, moisture_after_pulse, "auto", pulse_reason)
+                if moisture_after_pulse is not None:
+                    last_moisture = moisture_after_pulse
+
+                if final_reason != "session_budget_reached" or remaining_budget <= 0:
+                    if final_reason == "session_budget_reached" and remaining_budget <= 0:
+                        break
+                    if final_reason != "session_budget_reached":
+                        break
+
+                if remaining_budget <= 0:
+                    break
+
+                with self.lock:
+                    now = time.time()
+                    self.pump.mode = f"auto-soak {pulse_count}"
+                    self.pump.ends_at = now + soak_seconds
+
+                print(f"[BONSAI] Auto soak {pulse_count} for {soak_seconds}s")
+                if not self._sleep_interruptible(soak_seconds):
+                    final_reason = "manual_stop" if self._pump_stop_requested.is_set() else "shutdown"
+                    break
+
+                moisture_after_soak = self._read_moisture(use_smoothing=False)
+                self._record_moisture_sample(moisture_after_soak)
+                if moisture_after_soak is None:
+                    final_reason = "sensor_read_failed"
+                    break
+                last_moisture = moisture_after_soak
+                if moisture_after_soak >= target_moisture:
+                    final_reason = "target_reached"
+                    break
+                if self._is_office_hours_blocked():
+                    final_reason = "office_hours_blocked"
+                    break
+        except Exception as exc:
+            final_reason = f"error:{exc.__class__.__name__}"
+            print(f"[BONSAI] Auto pulse worker error: {exc}")
+        finally:
+            try:
+                self._set_pump_output(False)
+            except Exception as exc:
+                print(f"[BONSAI] Pump output reset failed: {exc}")
+            if total_watered_seconds > 0:
+                with self.lock:
+                    self.last_watered = datetime.now().strftime("%H:%M")
+                    self.last_water_time = time.time()
+            self._reset_pump_state(final_reason)
+            print(f"[BONSAI] Auto pulse session stop ({final_reason})")
 
     def _is_office_hours_blocked(self, at: Optional[datetime] = None) -> bool:
         with self.lock:
@@ -565,7 +726,7 @@ class BonsaiPlugin:
                 needs_water = m < cfg["moisture_threshold_low"]
                 blocked_by_hours = self._is_office_hours_blocked()
                 if needs_water and interval_ok and idle and not blocked_by_hours:
-                    self.start_pump("auto", int(cfg["watering_duration_seconds"]))
+                    self.start_auto_cycle(int(cfg["watering_duration_seconds"]))
 
             sleep_seconds = max(30, int(cfg["sensor_read_interval_seconds"]))
             for _ in range(sleep_seconds):
@@ -642,6 +803,8 @@ class BonsaiPlugin:
                 "moisture_sample_delay_ms",
                 "moisture_ema_alpha",
                 "watering_duration_seconds",
+                "auto_pulse_seconds",
+                "auto_soak_seconds",
                 "min_water_interval_seconds",
                 "sensor_read_interval_seconds",
                 "pump_max_runtime_seconds",
