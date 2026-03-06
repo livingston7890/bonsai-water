@@ -21,7 +21,8 @@ except Exception:
     Seesaw = None
 
 
-RELAY_PIN = 26
+# Waveshare relay HAT mapping in this build: CH1 -> BCM GPIO25.
+RELAY_PIN = 25
 PUMP_ON_LEVEL = GPIO.LOW if GPIO else 0
 PUMP_OFF_LEVEL = GPIO.HIGH if GPIO else 1
 SOIL_SENSOR_ADDR = 0x36
