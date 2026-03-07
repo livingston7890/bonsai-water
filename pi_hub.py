@@ -269,6 +269,10 @@ def master_dashboard_html() -> str:
           <button id="masterBonsaiAuto" type="button" class="master-state master-state-btn neutral" onclick="masterToggleBonsaiAuto()">--</button>
         </div>
         <div class="master-item">
+          <span class="master-item-name"><span class="material-symbols-rounded">schedule</span><span id="masterBonsaiOfficeHoursLabel">Office Hours (5PM to 2AM)</span></span>
+          <button id="masterBonsaiOfficeHoursBtn" type="button" class="master-state master-state-btn neutral" onclick="masterToggleBonsaiOfficeHours()">--</button>
+        </div>
+        <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">view_in_ar</span>OLED</span>
           <button id="masterBonsaiOled" type="button" class="master-state master-state-btn neutral" onclick="masterToggleBonsaiOled()">--</button>
         </div>
@@ -289,10 +293,6 @@ def master_dashboard_html() -> str:
         <div class="master-control-group">
           <span class="master-control-label"><span class="material-symbols-rounded label-icon">play_circle</span>Manual Pump</span>
           <button id="masterBonsaiManualToggleBtn" class="btn master-mini-btn state-action" onclick="masterToggleBonsaiManual()">--</button>
-        </div>
-        <div class="master-control-group">
-          <span class="master-control-label"><span class="material-symbols-rounded label-icon">schedule</span>Office Hours (5PM to 2AM)</span>
-          <button id="masterBonsaiOfficeHoursBtn" class="btn master-mini-btn state-off" onclick="masterToggleBonsaiOfficeHours()">--</button>
         </div>
       </div>
     </div>
@@ -550,6 +550,14 @@ function masterSetText(id, text) {
   } else {
     el.title = '';
   }
+}
+
+function masterFormatHourLabel(hour24) {
+  const normalized = ((Number(hour24) % 24) + 24) % 24;
+  const suffix = normalized >= 12 ? 'PM' : 'AM';
+  let hour12 = normalized % 12;
+  if (hour12 === 0) hour12 = 12;
+  return String(hour12) + suffix;
 }
 
 let masterActionTimer = null;
@@ -881,11 +889,17 @@ async function masterRefresh() {
 
     const autoOn = !!(bonsai.config && bonsai.config.auto_watering_enabled);
     const officeHoursEnabled = !!(bonsai.config && bonsai.config.office_hours_enabled);
+    const officeHoursStart = bonsai.config ? bonsai.config.office_hours_start_hour : 17;
+    const officeHoursEnd = bonsai.config ? bonsai.config.office_hours_end_hour : 2;
     masterSetText('masterAutoWaterKpi', autoOn ? 'ON' : 'OFF');
     masterSetText('masterLastWatered', 'Last: ' + String(bonsai.last_watered || '--'));
     masterSetStatePillButton('masterBonsaiAuto', autoOn ? 'on' : 'off');
     masterSetStatePillButton('masterBonsaiOled', bonsai.oled_enabled ? 'on' : 'off');
     masterSetReadOnlyState('masterBonsaiGpio', bonsai.gpio_ready ? 'on' : 'off', 'READY', 'OFFLINE', 'UNKNOWN');
+    masterSetText(
+      'masterBonsaiOfficeHoursLabel',
+      'Office Hours (' + masterFormatHourLabel(officeHoursStart) + ' to ' + masterFormatHourLabel(officeHoursEnd) + ')'
+    );
 
     const low = bonsai.config ? bonsai.config.moisture_threshold_low : '--';
     const high = bonsai.config ? bonsai.config.moisture_threshold_high : '--';
@@ -896,7 +910,7 @@ async function masterRefresh() {
     masterUiState.bonsaiManual = manualRunning;
     masterUiState.bonsaiOfficeHours = officeHoursEnabled;
     masterSetManualToggleButton('masterBonsaiManualToggleBtn', manualRunning, true);
-    masterSetToggleButton('masterBonsaiOfficeHoursBtn', officeHoursEnabled, 'Enabled', 'Disabled', 'N/A');
+    masterSetStatePillButton('masterBonsaiOfficeHoursBtn', officeHoursEnabled, 'Enabled', 'Disabled', 'N/A');
     const readNowBtn = document.getElementById('masterBonsaiReadNowBtn');
     if (readNowBtn) readNowBtn.disabled = false;
     const officeHoursBtn = document.getElementById('masterBonsaiOfficeHoursBtn');
@@ -910,7 +924,8 @@ async function masterRefresh() {
     masterSetStatePillButton('masterBonsaiAuto', null);
     masterSetStatePillButton('masterBonsaiOled', null);
     masterSetManualToggleButton('masterBonsaiManualToggleBtn', false, false);
-    masterSetToggleButton('masterBonsaiOfficeHoursBtn', null, 'Enabled', 'Disabled', 'N/A');
+    masterSetStatePillButton('masterBonsaiOfficeHoursBtn', null, 'Enabled', 'Disabled', 'N/A');
+    masterSetText('masterBonsaiOfficeHoursLabel', 'Office Hours (5PM to 2AM)');
     const readNowBtn = document.getElementById('masterBonsaiReadNowBtn');
     if (readNowBtn) readNowBtn.disabled = true;
     const officeHoursBtn = document.getElementById('masterBonsaiOfficeHoursBtn');

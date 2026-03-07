@@ -1007,6 +1007,63 @@ class BonsaiPlugin:
     <div class="panel-title" style="margin-bottom:8px;"><span class="material-symbols-rounded label-icon">history</span>Recent Waterings</div>
     <div id="bonsaiWaterings" class="small mono muted">Loading...</div>
   </div>
+
+  <div class="card">
+    <div class="panel-title"><span class="material-symbols-rounded label-icon">schedule</span>Office Hours</div>
+    <div class="small muted">Block auto watering during the selected time window when Office Hours is enabled.</div>
+    <div class="grid" style="margin-top:12px;">
+      <div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">login</span>Start time</div>
+        <div class="row">
+          <select id="bonsaiOfficeStartHour">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+          </select>
+          <select id="bonsaiOfficeStartAmPm">
+            <option value="AM">AM</option>
+            <option value="PM">PM</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">logout</span>End time</div>
+        <div class="row">
+          <select id="bonsaiOfficeEndHour">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+          </select>
+          <select id="bonsaiOfficeEndAmPm">
+            <option value="AM">AM</option>
+            <option value="PM">PM</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn" onclick="bonsaiSaveOfficeHours()">Save Office Hours</button>
+      <span id="bonsaiOfficeHoursMsg" class="small muted"></span>
+    </div>
+  </div>
 """
 
     def dashboard_js(self) -> str:
@@ -1020,6 +1077,39 @@ function bonsaiStatusText(st) {
   if (st.moisture < st.config.moisture_threshold_low) return 'Dry';
   if (st.moisture > st.config.moisture_threshold_high) return 'Wet';
   return 'OK';
+}
+
+function bonsaiHour24ToParts(hour24) {
+  const normalized = ((Number(hour24) % 24) + 24) % 24;
+  const ampm = normalized >= 12 ? 'PM' : 'AM';
+  let hour12 = normalized % 12;
+  if (hour12 === 0) hour12 = 12;
+  return {hour: String(hour12), ampm};
+}
+
+function bonsaiHourPartsTo24(hour12, ampm) {
+  const hour = Math.max(1, Math.min(12, parseInt(hour12, 10) || 12));
+  const upper = String(ampm || 'AM').toUpperCase() === 'PM' ? 'PM' : 'AM';
+  if (upper === 'AM') return hour === 12 ? 0 : hour;
+  return hour === 12 ? 12 : hour + 12;
+}
+
+function bonsaiSetOfficeHoursSelectors(st) {
+  const active = document.activeElement ? document.activeElement.id : '';
+  const officeIds = new Set([
+    'bonsaiOfficeStartHour',
+    'bonsaiOfficeStartAmPm',
+    'bonsaiOfficeEndHour',
+    'bonsaiOfficeEndAmPm',
+  ]);
+  if (officeIds.has(active)) return;
+
+  const start = bonsaiHour24ToParts(st.config.office_hours_start_hour);
+  const end = bonsaiHour24ToParts(st.config.office_hours_end_hour);
+  document.getElementById('bonsaiOfficeStartHour').value = start.hour;
+  document.getElementById('bonsaiOfficeStartAmPm').value = start.ampm;
+  document.getElementById('bonsaiOfficeEndHour').value = end.hour;
+  document.getElementById('bonsaiOfficeEndAmPm').value = end.ampm;
 }
 
 async function bonsaiRefreshStatus() {
@@ -1044,6 +1134,7 @@ async function bonsaiRefreshStatus() {
   document.getElementById('bonsaiDur').value = st.config.watering_duration_seconds;
   document.getElementById('bonsaiIntv').value = st.config.min_water_interval_seconds;
   document.getElementById('bonsaiReadi').value = st.config.sensor_read_interval_seconds;
+  bonsaiSetOfficeHoursSelectors(st);
 
   const oledEnabled = !!st.oled_enabled;
   const oledDetected = !!st.display_ready;
@@ -1142,6 +1233,29 @@ async function bonsaiSaveSettings() {
   });
   document.getElementById('bonsaiSaveMsg').textContent = 'Saved';
   setTimeout(() => document.getElementById('bonsaiSaveMsg').textContent = '', 1500);
+}
+
+async function bonsaiSaveOfficeHours() {
+  const startHour24 = bonsaiHourPartsTo24(
+    document.getElementById('bonsaiOfficeStartHour').value,
+    document.getElementById('bonsaiOfficeStartAmPm').value
+  );
+  const endHour24 = bonsaiHourPartsTo24(
+    document.getElementById('bonsaiOfficeEndHour').value,
+    document.getElementById('bonsaiOfficeEndAmPm').value
+  );
+
+  await api('/api/bonsai/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      office_hours_start_hour: startHour24,
+      office_hours_end_hour: endHour24,
+    })
+  });
+  document.getElementById('bonsaiOfficeHoursMsg').textContent = 'Office Hours saved';
+  setTimeout(() => document.getElementById('bonsaiOfficeHoursMsg').textContent = '', 1800);
+  await bonsaiRefreshStatus();
 }
 
 async function bonsaiToggleOled() {
