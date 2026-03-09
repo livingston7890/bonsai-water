@@ -842,7 +842,7 @@ class BonsaiPlugin:
                     "ok": True,
                     "office_hours_enabled": enabled,
                     "office_hours_blocking_now": self._is_office_hours_blocked(),
-                    "window": "5PM to 2AM",
+                    "window": "Quiet Hours",
                 }
             )
 
@@ -1009,8 +1009,8 @@ class BonsaiPlugin:
   </div>
 
   <div class="card">
-    <div class="panel-title"><span class="material-symbols-rounded label-icon">schedule</span>Office Hours</div>
-    <div class="small muted">Block auto watering during the selected time window when Office Hours is enabled.</div>
+    <div class="panel-title"><span class="material-symbols-rounded label-icon">schedule</span>Quiet Hours</div>
+    <div class="small muted">Block auto watering during the selected time window when Quiet Hours is enabled.</div>
     <div class="grid" style="margin-top:12px;">
       <div>
         <div class="small muted"><span class="material-symbols-rounded label-icon">login</span>Start time</div>
@@ -1060,7 +1060,7 @@ class BonsaiPlugin:
       </div>
     </div>
     <div class="row" style="margin-top:12px;">
-      <button class="btn" onclick="bonsaiSaveOfficeHours()">Save Office Hours</button>
+      <button class="btn" onclick="bonsaiSaveOfficeHours()">Save Quiet Hours</button>
       <span id="bonsaiOfficeHoursMsg" class="small muted"></span>
     </div>
   </div>
@@ -1112,6 +1112,41 @@ function bonsaiSetOfficeHoursSelectors(st) {
   document.getElementById('bonsaiOfficeEndAmPm').value = end.ampm;
 }
 
+const bonsaiConfigInputIds = ['bonsaiLow', 'bonsaiHigh', 'bonsaiDur', 'bonsaiIntv', 'bonsaiReadi'];
+const bonsaiDirtyConfigInputs = new Set();
+
+function bonsaiBindConfigInputs() {
+  bonsaiConfigInputIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.dirtyBound === '1') return;
+    const markDirty = () => bonsaiDirtyConfigInputs.add(id);
+    el.addEventListener('input', markDirty);
+    el.addEventListener('change', markDirty);
+    el.dataset.dirtyBound = '1';
+  });
+}
+
+function bonsaiSetConfigInputs(st) {
+  const active = document.activeElement ? document.activeElement.id : '';
+  const configValues = {
+    bonsaiLow: st.config.moisture_threshold_low,
+    bonsaiHigh: st.config.moisture_threshold_high,
+    bonsaiDur: st.config.watering_duration_seconds,
+    bonsaiIntv: st.config.min_water_interval_seconds,
+    bonsaiReadi: st.config.sensor_read_interval_seconds,
+  };
+
+  Object.entries(configValues).forEach(([id, value]) => {
+    if (active === id) return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    const serverValue = String(value);
+    if (bonsaiDirtyConfigInputs.has(id) && String(el.value) !== serverValue) return;
+    bonsaiDirtyConfigInputs.delete(id);
+    el.value = value;
+  });
+}
+
 async function bonsaiRefreshStatus() {
   const st = await api('/api/bonsai/status');
   bonsaiState = st;
@@ -1129,11 +1164,7 @@ async function bonsaiRefreshStatus() {
   }
   document.getElementById('bonsaiPumpMeta').textContent = meta;
 
-  document.getElementById('bonsaiLow').value = st.config.moisture_threshold_low;
-  document.getElementById('bonsaiHigh').value = st.config.moisture_threshold_high;
-  document.getElementById('bonsaiDur').value = st.config.watering_duration_seconds;
-  document.getElementById('bonsaiIntv').value = st.config.min_water_interval_seconds;
-  document.getElementById('bonsaiReadi').value = st.config.sensor_read_interval_seconds;
+  bonsaiSetConfigInputs(st);
   bonsaiSetOfficeHoursSelectors(st);
 
   const oledEnabled = !!st.oled_enabled;
@@ -1160,6 +1191,17 @@ async function bonsaiRefreshStatus() {
   oledBtn.classList.toggle('state-off', !oledEnabled);
 }
 
+async function bonsaiRefreshLinkedDashboards() {
+  await bonsaiRefreshStatus();
+  if (typeof masterRefresh === 'function') {
+    try {
+      await masterRefresh();
+    } catch (_) {
+      // Master dashboard may not be mounted yet; ignore and keep Bonsai responsive.
+    }
+  }
+}
+
 async function bonsaiRefreshWaterings() {
   const list = await api('/api/bonsai/waterings?count=15');
   const el = document.getElementById('bonsaiWaterings');
@@ -1182,7 +1224,7 @@ async function bonsaiToggleAuto() {
   });
   document.getElementById('bonsaiAutoMsg').textContent = enabled ? 'Auto watering ON' : 'Auto watering OFF';
   setTimeout(() => document.getElementById('bonsaiAutoMsg').textContent = '', 1500);
-  await bonsaiRefreshStatus();
+  await bonsaiRefreshLinkedDashboards();
 }
 
 async function bonsaiToggleManual() {
@@ -1195,7 +1237,7 @@ async function bonsaiToggleManual() {
   });
   document.getElementById('bonsaiManualMsg').textContent = r.message;
   setTimeout(() => document.getElementById('bonsaiManualMsg').textContent = '', 2500);
-  await bonsaiRefreshStatus();
+  await bonsaiRefreshLinkedDashboards();
   await bonsaiRefreshWaterings();
 }
 
@@ -1215,7 +1257,7 @@ async function bonsaiReadNow() {
     document.getElementById('bonsaiReadMsg').textContent = msg;
   }
   setTimeout(() => document.getElementById('bonsaiReadMsg').textContent = '', 2200);
-  await bonsaiRefreshStatus();
+  await bonsaiRefreshLinkedDashboards();
 }
 
 async function bonsaiSaveSettings() {
@@ -1231,8 +1273,10 @@ async function bonsaiSaveSettings() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(cfg)
   });
+  bonsaiConfigInputIds.forEach((id) => bonsaiDirtyConfigInputs.delete(id));
   document.getElementById('bonsaiSaveMsg').textContent = 'Saved';
   setTimeout(() => document.getElementById('bonsaiSaveMsg').textContent = '', 1500);
+  await bonsaiRefreshLinkedDashboards();
 }
 
 async function bonsaiSaveOfficeHours() {
@@ -1253,9 +1297,9 @@ async function bonsaiSaveOfficeHours() {
       office_hours_end_hour: endHour24,
     })
   });
-  document.getElementById('bonsaiOfficeHoursMsg').textContent = 'Office Hours saved';
+  document.getElementById('bonsaiOfficeHoursMsg').textContent = 'Quiet Hours saved';
   setTimeout(() => document.getElementById('bonsaiOfficeHoursMsg').textContent = '', 1800);
-  await bonsaiRefreshStatus();
+  await bonsaiRefreshLinkedDashboards();
 }
 
 async function bonsaiToggleOled() {
@@ -1267,12 +1311,13 @@ async function bonsaiToggleOled() {
   });
   document.getElementById('bonsaiOledMsg').textContent = r.message || 'Saved';
   setTimeout(() => document.getElementById('bonsaiOledMsg').textContent = '', 2000);
-  await bonsaiRefreshStatus();
+  await bonsaiRefreshLinkedDashboards();
 }
 """
 
     def dashboard_init_js(self) -> str:
         return """
+  bonsaiBindConfigInputs();
   await bonsaiRefreshStatus();
   await bonsaiRefreshWaterings();
   setInterval(bonsaiRefreshStatus, 1000);

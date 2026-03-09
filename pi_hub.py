@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 from html import escape
 from typing import Any
 
@@ -41,6 +42,40 @@ MODULE_META = {
     "bonsai": {"tag": "BONSAI", "hint": "Moisture, pump, OLED", "icon": "eco"},
     "pihole": {"tag": "DNS", "hint": "Blocking status and controls", "icon": "dns"},
 }
+
+
+def get_hub_build_label() -> str:
+    revision = "local"
+    try:
+        completed = subprocess.run(
+            ["git", "-C", APP_DIR, "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        candidate = completed.stdout.strip()
+        if completed.returncode == 0 and candidate:
+            revision = candidate
+    except Exception:
+        pass
+
+    latest_mtime = 0.0
+    for path in (
+        os.path.join(APP_DIR, "pi_hub.py"),
+        os.path.join(APP_DIR, "plugins", "bonsai_plugin.py"),
+        os.path.join(APP_DIR, "plugins", "home_assistant_plugin.py"),
+        os.path.join(APP_DIR, "plugins", "pihole_plugin.py"),
+    ):
+        try:
+            latest_mtime = max(latest_mtime, os.path.getmtime(path))
+        except OSError:
+            continue
+
+    if latest_mtime <= 0:
+        return revision
+
+    stamp = datetime.fromtimestamp(latest_mtime).strftime("%Y-%m-%d %H:%M")
+    return f"{revision} | {stamp}"
 
 
 def load_hub_update_config() -> dict[str, Any]:
@@ -269,7 +304,7 @@ def master_dashboard_html() -> str:
           <button id="masterBonsaiAuto" type="button" class="master-state master-state-btn neutral" onclick="masterToggleBonsaiAuto()">--</button>
         </div>
         <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">schedule</span><span id="masterBonsaiOfficeHoursLabel">Office Hours (5PM to 2AM)</span></span>
+          <span class="master-item-name"><span class="material-symbols-rounded">schedule</span><span id="masterBonsaiOfficeHoursLabel">Quiet Hours</span></span>
           <button id="masterBonsaiOfficeHoursBtn" type="button" class="master-state master-state-btn neutral" onclick="masterToggleBonsaiOfficeHours()">--</button>
         </div>
         <div class="master-item">
@@ -720,7 +755,7 @@ async function masterSetBonsaiOled(enabled) {
 
 async function masterSetBonsaiOfficeHours(enabled) {
   await masterRunAction(
-    enabled ? 'Office Hours Enabled' : 'Office Hours Disabled',
+    enabled ? 'Quiet Hours Enabled' : 'Quiet Hours Disabled',
     () => masterPost('/api/bonsai/office_hours', {enabled: !!enabled})
   );
 }
@@ -896,10 +931,7 @@ async function masterRefresh() {
     masterSetStatePillButton('masterBonsaiAuto', autoOn ? 'on' : 'off');
     masterSetStatePillButton('masterBonsaiOled', bonsai.oled_enabled ? 'on' : 'off');
     masterSetReadOnlyState('masterBonsaiGpio', bonsai.gpio_ready ? 'on' : 'off', 'READY', 'OFFLINE', 'UNKNOWN');
-    masterSetText(
-      'masterBonsaiOfficeHoursLabel',
-      'Office Hours (' + masterFormatHourLabel(officeHoursStart) + ' to ' + masterFormatHourLabel(officeHoursEnd) + ')'
-    );
+    masterSetText('masterBonsaiOfficeHoursLabel', 'Quiet Hours');
 
     const low = bonsai.config ? bonsai.config.moisture_threshold_low : '--';
     const high = bonsai.config ? bonsai.config.moisture_threshold_high : '--';
@@ -925,7 +957,7 @@ async function masterRefresh() {
     masterSetStatePillButton('masterBonsaiOled', null);
     masterSetManualToggleButton('masterBonsaiManualToggleBtn', false, false);
     masterSetStatePillButton('masterBonsaiOfficeHoursBtn', null, 'Enabled', 'Disabled', 'N/A');
-    masterSetText('masterBonsaiOfficeHoursLabel', 'Office Hours (5PM to 2AM)');
+    masterSetText('masterBonsaiOfficeHoursLabel', 'Quiet Hours');
     const readNowBtn = document.getElementById('masterBonsaiReadNowBtn');
     if (readNowBtn) readNowBtn.disabled = true;
     const officeHoursBtn = document.getElementById('masterBonsaiOfficeHoursBtn');
@@ -977,13 +1009,15 @@ def master_dashboard_init_js() -> str:
 
 
 def settings_dashboard_html() -> str:
-    return """
+    build_label = escape(get_hub_build_label())
+    return f"""
   <div class="card">
     <div class="panel-title-row">
       <span class="material-symbols-rounded panel-title-icon">settings</span>
       <div class="panel-title" style="margin-bottom:0;">Hub Settings</div>
     </div>
     <div class="panel-meta">Updater, restart controls, and source configuration.</div>
+    <div class="small muted" style="margin-top:10px;">Build {build_label}</div>
     <div class="row" style="margin-top:12px;">
       <button id="settingsThemeToggleBtn" class="btn gray chip-btn" onclick="toggleTheme()">
         <span id="settingsThemeToggleIcon" class="material-symbols-rounded" aria-hidden="true">dark_mode</span>
