@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
     "moisture_threshold_high": 65,
     "moisture_raw_dry": 300,
     "moisture_raw_wet": 1000,
+    "moisture_curve_points": [],
     "moisture_sample_count": 7,
     "moisture_sample_delay_ms": 40,
     "moisture_ema_alpha": 0.35,
@@ -57,6 +58,8 @@ class PumpState:
     mode: str = "idle"
     started_at: float = 0.0
     ends_at: float = 0.0
+    session_total_seconds: float = 0.0
+    session_remaining_seconds: float = 0.0
     stop_reason: str = ""
 
 
@@ -100,12 +103,42 @@ class BonsaiPlugin:
                 saved = json.load(f)
             merged = DEFAULT_CONFIG.copy()
             merged.update(saved)
+            merged["moisture_curve_points"] = self._sanitize_curve_points(merged.get("moisture_curve_points", []))
             return merged
         return DEFAULT_CONFIG.copy()
 
     def _save_config(self, config: dict) -> None:
         with open(self.config_file, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
+
+    @staticmethod
+    def _sanitize_curve_points(points: object) -> list[dict]:
+        if not isinstance(points, list):
+            return []
+
+        cleaned: list[dict] = []
+        for item in points:
+            if not isinstance(item, dict):
+                continue
+            try:
+                raw_value = int(round(float(item.get("raw"))))
+                percent_value = round(max(0.0, min(100.0, float(item.get("percent")))), 1)
+            except Exception:
+                continue
+
+            label = str(item.get("label", "")).strip()[:64]
+            timestamp = str(item.get("timestamp", "")).strip()[:32]
+            cleaned.append(
+                {
+                    "raw": raw_value,
+                    "percent": percent_value,
+                    "label": label,
+                    "timestamp": timestamp,
+                }
+            )
+
+        cleaned.sort(key=lambda point: (point["percent"], point["raw"]))
+        return cleaned
 
     def _init_db(self) -> None:
         conn = sqlite3.connect(self.db_file)
@@ -246,6 +279,8 @@ class BonsaiPlugin:
             self.pump.mode = "idle"
             self.pump.started_at = 0.0
             self.pump.ends_at = 0.0
+            self.pump.session_total_seconds = 0.0
+            self.pump.session_remaining_seconds = 0.0
             self.pump.stop_reason = stop_reason
             self.manual_toggle_on = False
             self._pump_stop_requested.clear()
@@ -307,21 +342,71 @@ class BonsaiPlugin:
         except Exception:
             return None
 
-    def _convert_moisture(self, raw: int) -> float:
-        dry_value = float(self.config.get("moisture_raw_dry", 300))
-        wet_value = float(self.config.get("moisture_raw_wet", 1000))
-        if wet_value == dry_value:
-            return 0.0
+    def _curve_points(self) -> list[dict]:
+        with self.lock:
+            custom_points = self._sanitize_curve_points(self.config.get("moisture_curve_points", []))
+            dry_value = int(round(float(self.config.get("moisture_raw_dry", 300))))
+            wet_value = int(round(float(self.config.get("moisture_raw_wet", 1000))))
 
-        # Support either orientation:
-        # - Seesaw defaults: larger raw value = wetter
-        # - Some sensors: smaller raw value = wetter
-        if wet_value > dry_value:
-            pct = (float(raw) - dry_value) / (wet_value - dry_value) * 100.0
+        points_by_key: dict[tuple[int, float], dict] = {}
+
+        def add_point(raw_value: int, percent_value: float, label: str, source: str, timestamp: str = "") -> None:
+            point = {
+                "raw": int(raw_value),
+                "percent": round(max(0.0, min(100.0, float(percent_value))), 1),
+                "label": label,
+                "source": source,
+                "timestamp": timestamp,
+            }
+            points_by_key[(point["raw"], point["percent"])] = point
+
+        add_point(dry_value, 0.0, "Dry anchor", "config")
+        add_point(wet_value, 100.0, "Wet anchor", "config")
+        for point in custom_points:
+            add_point(point["raw"], point["percent"], point.get("label", ""), "custom", point.get("timestamp", ""))
+
+        points = list(points_by_key.values())
+        points.sort(key=lambda point: (point["raw"], point["percent"]))
+        return points
+
+    def _interpolate_curve(self, raw_value: float, points: list[dict]) -> float:
+        if not points:
+            return 0.0
+        if len(points) == 1:
+            return float(points[0]["percent"])
+
+        ordered = sorted(points, key=lambda point: point["raw"])
+        raw_float = float(raw_value)
+
+        lower = ordered[0]
+        upper = ordered[1]
+
+        if raw_float <= ordered[0]["raw"]:
+            lower, upper = ordered[0], ordered[1]
+        elif raw_float >= ordered[-1]["raw"]:
+            lower, upper = ordered[-2], ordered[-1]
         else:
-            pct = (dry_value - float(raw)) / (dry_value - wet_value) * 100.0
-        pct = max(0, min(100, pct))
-        return round(pct, 1)
+            for idx in range(len(ordered) - 1):
+                candidate_lower = ordered[idx]
+                candidate_upper = ordered[idx + 1]
+                if candidate_lower["raw"] <= raw_float <= candidate_upper["raw"]:
+                    lower, upper = candidate_lower, candidate_upper
+                    break
+
+        lower_raw = float(lower["raw"])
+        upper_raw = float(upper["raw"])
+        lower_pct = float(lower["percent"])
+        upper_pct = float(upper["percent"])
+
+        if upper_raw == lower_raw:
+            return round(upper_pct, 1)
+
+        pct = lower_pct + ((raw_float - lower_raw) * (upper_pct - lower_pct) / (upper_raw - lower_raw))
+        return round(max(0.0, min(100.0, pct)), 1)
+
+    def _convert_moisture(self, raw: int) -> float:
+        points = self._curve_points()
+        return self._interpolate_curve(raw, points)
 
     @staticmethod
     def _trimmed_average(values: list[int]) -> int:
@@ -447,6 +532,8 @@ class BonsaiPlugin:
             self.pump.mode = mode
             self.pump.started_at = time.time()
             self.pump.ends_at = self.pump.started_at + run_seconds
+            self.pump.session_total_seconds = float(run_seconds)
+            self.pump.session_remaining_seconds = float(run_seconds)
             self.pump.stop_reason = ""
 
         started = time.time()
@@ -459,6 +546,8 @@ class BonsaiPlugin:
                 if self._pump_stop_requested.is_set():
                     stop_reason = "manual_stop"
                     break
+                with self.lock:
+                    self.pump.session_remaining_seconds = max(0.0, (started + run_seconds) - time.time())
                 if time.time() >= started + run_seconds:
                     stop_reason = "safety_timeout" if mode == "manual" else "completed"
                     break
@@ -547,6 +636,8 @@ class BonsaiPlugin:
             self.pump.mode = "auto-pulse"
             self.pump.started_at = time.time()
             self.pump.ends_at = self.pump.started_at + min(total_budget, pulse_seconds_default)
+            self.pump.session_total_seconds = float(total_budget)
+            self.pump.session_remaining_seconds = float(total_budget)
             self.pump.stop_reason = ""
 
         remaining_budget = total_budget
@@ -574,6 +665,7 @@ class BonsaiPlugin:
                     now = time.time()
                     self.pump.mode = f"auto-pulse {pulse_count}"
                     self.pump.ends_at = now + pulse_seconds
+                    self.pump.session_remaining_seconds = float(remaining_budget)
                     self.pump.stop_reason = ""
 
                 pulse_started = time.time()
@@ -590,6 +682,11 @@ class BonsaiPlugin:
                             pulse_reason = "manual_stop"
                             final_reason = "manual_stop"
                             break
+                        with self.lock:
+                            self.pump.session_remaining_seconds = max(
+                                0.0,
+                                float(remaining_budget) - (time.time() - pulse_started),
+                            )
                         if time.time() >= pulse_started + pulse_seconds:
                             break
                         time.sleep(0.1)
@@ -632,6 +729,7 @@ class BonsaiPlugin:
                     now = time.time()
                     self.pump.mode = f"auto-soak {pulse_count}"
                     self.pump.ends_at = now + soak_seconds
+                    self.pump.session_remaining_seconds = float(remaining_budget)
 
                 print(f"[BONSAI] Auto soak {pulse_count} for {soak_seconds}s")
                 if not self._sleep_interruptible(soak_seconds):
@@ -769,12 +867,17 @@ class BonsaiPlugin:
             with self.lock:
                 now = time.time()
                 remaining = 0
+                session_remaining = 0
+                session_total = 0
                 if self.pump.running:
                     remaining = max(0, int(round(self.pump.ends_at - now)))
+                    session_remaining = max(0, int(round(self.pump.session_remaining_seconds)))
+                    session_total = max(0, int(round(self.pump.session_total_seconds)))
                 return jsonify(
                     {
                         "moisture": self.current_moisture,
                         "moisture_raw": self.current_moisture_raw,
+                        "calibration_points": self._curve_points(),
                         "last_watered": self.last_watered,
                         "manual_toggle_on": self.manual_toggle_on,
                         "config": self.config,
@@ -786,6 +889,8 @@ class BonsaiPlugin:
                             "running": self.pump.running,
                             "mode": self.pump.mode,
                             "remaining_seconds": remaining,
+                            "session_remaining_seconds": session_remaining,
+                            "session_total_seconds": session_total,
                             "stop_reason": self.pump.stop_reason,
                         },
                     }
@@ -888,6 +993,84 @@ class BonsaiPlugin:
                 }
             )
 
+        @app.route("/api/bonsai/calibration_point", methods=["POST"])
+        def bonsai_api_calibration_point():
+            payload = request.get_json(force=True)
+            try:
+                percent = round(float(payload.get("percent")), 1)
+            except Exception:
+                return jsonify({"ok": False, "message": "Enter a calibration percent first."}), 400
+
+            percent = max(0.0, min(100.0, percent))
+            label = str(payload.get("label", "")).strip()[:64]
+
+            moisture = self._read_moisture(use_smoothing=False)
+            raw_value = self.current_moisture_raw
+
+            if moisture is None or raw_value is None:
+                return jsonify({"ok": False, "message": "Could not read the moisture sensor right now."}), 503
+
+            with self.lock:
+                existing = self._sanitize_curve_points(self.config.get("moisture_curve_points", []))
+                updated: list[dict] = []
+                replaced = False
+                for point in existing:
+                    if abs(float(point.get("percent", -999.0)) - percent) < 0.05:
+                        if not replaced:
+                            updated.append(
+                                {
+                                    "raw": int(raw_value),
+                                    "percent": percent,
+                                    "label": label,
+                                    "timestamp": datetime.now().isoformat(timespec="seconds"),
+                                }
+                            )
+                            replaced = True
+                        continue
+                    updated.append(point)
+                if not replaced:
+                    updated.append(
+                        {
+                            "raw": int(raw_value),
+                            "percent": percent,
+                            "label": label,
+                            "timestamp": datetime.now().isoformat(timespec="seconds"),
+                        }
+                    )
+                self.config["moisture_curve_points"] = self._sanitize_curve_points(updated)
+                self._save_config(self.config)
+
+            refreshed = self._convert_moisture(int(raw_value))
+            self._record_moisture_sample(refreshed)
+            return jsonify(
+                {
+                    "ok": True,
+                    "message": f"Captured raw {raw_value} as {percent}%.",
+                    "moisture": refreshed,
+                    "moisture_raw": raw_value,
+                    "calibration_points": self._curve_points(),
+                }
+            )
+
+        @app.route("/api/bonsai/calibration_reset", methods=["POST"])
+        def bonsai_api_calibration_reset():
+            with self.lock:
+                self.config["moisture_curve_points"] = []
+                self._save_config(self.config)
+            refreshed = None
+            if self.current_moisture_raw is not None:
+                refreshed = self._convert_moisture(int(self.current_moisture_raw))
+                self._record_moisture_sample(refreshed)
+            return jsonify(
+                {
+                    "ok": True,
+                    "message": "Custom calibration anchors cleared.",
+                    "moisture": refreshed,
+                    "moisture_raw": self.current_moisture_raw,
+                    "calibration_points": self._curve_points(),
+                }
+            )
+
         @app.route("/api/bonsai/readings")
         def bonsai_api_readings():
             hours = request.args.get("hours", 48, type=int)
@@ -975,18 +1158,29 @@ class BonsaiPlugin:
 
   <div class="card">
     <div class="panel-title"><span class="material-symbols-rounded label-icon">tune</span>Thresholds & Timing</div>
+    <div id="bonsaiAutoTimingSummary" class="small muted" style="margin-bottom:12px;">
+      Auto session runs in short pulses until the target is reached or the session budget is used.
+    </div>
     <div class="grid">
       <div>
-        <div class="small muted"><span class="material-symbols-rounded label-icon">south</span>Low threshold (%)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">south</span>Start auto below (%)</div>
         <input id="bonsaiLow" type="number" min="5" max="95">
       </div>
       <div>
-        <div class="small muted"><span class="material-symbols-rounded label-icon">north</span>High threshold (%)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">north</span>Stop pulses at (%)</div>
         <input id="bonsaiHigh" type="number" min="5" max="95">
       </div>
       <div>
-        <div class="small muted"><span class="material-symbols-rounded label-icon">timer</span>Auto run duration (s)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">timer</span>Session pump budget (s)</div>
         <input id="bonsaiDur" type="number" min="1" max="300">
+      </div>
+      <div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">electric_bolt</span>Pulse length (s)</div>
+        <input id="bonsaiPulse" type="number" min="1" max="120">
+      </div>
+      <div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">water_lux</span>Soak delay (s)</div>
+        <input id="bonsaiSoak" type="number" min="10" max="600">
       </div>
       <div>
         <div class="small muted"><span class="material-symbols-rounded label-icon">schedule</span>Min interval (s)</div>
@@ -1001,6 +1195,37 @@ class BonsaiPlugin:
       <button class="btn" onclick="bonsaiSaveSettings()">Save Settings</button>
       <span id="bonsaiSaveMsg" class="small muted"></span>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="panel-title"><span class="material-symbols-rounded label-icon">query_stats</span>Calibration Curve</div>
+    <div class="small muted">
+      Capture the current raw sensor reading as the percent that feels true in the pot. These anchors shape the moisture curve between the dry and wet endpoints.
+    </div>
+    <div class="grid" style="margin-top:12px;">
+      <div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">straighten</span>Live raw</div>
+        <div id="bonsaiRawValue" class="kpi" style="font-size:24px;">--</div>
+      </div>
+      <div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">percent</span>Mapped moisture</div>
+        <div id="bonsaiMappedValue" class="kpi" style="font-size:24px;">--</div>
+      </div>
+      <div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">pin</span>Capture current as (%)</div>
+        <input id="bonsaiCalPercent" type="number" min="1" max="99" step="0.1" placeholder="25">
+      </div>
+      <div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">edit_note</span>Optional note</div>
+        <input id="bonsaiCalLabel" type="text" maxlength="64" placeholder="Water now / fully watered">
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn" onclick="bonsaiCaptureCalibration()">Capture Anchor</button>
+      <button class="btn" onclick="bonsaiResetCalibration()">Clear Custom Anchors</button>
+      <span id="bonsaiCalMsg" class="small muted"></span>
+    </div>
+    <div id="bonsaiCurvePoints" class="small mono muted" style="margin-top:10px;">Loading calibration anchors...</div>
   </div>
 
   <div class="card">
@@ -1112,7 +1337,7 @@ function bonsaiSetOfficeHoursSelectors(st) {
   document.getElementById('bonsaiOfficeEndAmPm').value = end.ampm;
 }
 
-const bonsaiConfigInputIds = ['bonsaiLow', 'bonsaiHigh', 'bonsaiDur', 'bonsaiIntv', 'bonsaiReadi'];
+const bonsaiConfigInputIds = ['bonsaiLow', 'bonsaiHigh', 'bonsaiDur', 'bonsaiPulse', 'bonsaiSoak', 'bonsaiIntv', 'bonsaiReadi'];
 const bonsaiDirtyConfigInputs = new Set();
 
 function bonsaiBindConfigInputs() {
@@ -1132,6 +1357,8 @@ function bonsaiSetConfigInputs(st) {
     bonsaiLow: st.config.moisture_threshold_low,
     bonsaiHigh: st.config.moisture_threshold_high,
     bonsaiDur: st.config.watering_duration_seconds,
+    bonsaiPulse: st.config.auto_pulse_seconds,
+    bonsaiSoak: st.config.auto_soak_seconds,
     bonsaiIntv: st.config.min_water_interval_seconds,
     bonsaiReadi: st.config.sensor_read_interval_seconds,
   };
@@ -1147,6 +1374,63 @@ function bonsaiSetConfigInputs(st) {
   });
 }
 
+function bonsaiRenderAutoTimingSummary(st) {
+  const el = document.getElementById('bonsaiAutoTimingSummary');
+  if (!el || !st || !st.config) return;
+  const budget = Number(st.config.watering_duration_seconds || 0);
+  const pulse = Number(st.config.auto_pulse_seconds || 0);
+  const soak = Number(st.config.auto_soak_seconds || 0);
+  const low = Number(st.config.moisture_threshold_low || 0);
+  const high = Number(st.config.moisture_threshold_high || 0);
+  el.textContent =
+    'Auto session uses up to ' + budget + 's of total pump-on time, in ' +
+    pulse + 's pulses with ' + soak + 's soak delays. It starts below ' +
+    low + '% and stops pulsing at ' + high + '%.';
+}
+
+function bonsaiFormatCurvePoint(point) {
+  const percent = Number(point.percent);
+  const percentText = Number.isInteger(percent) ? String(percent) : percent.toFixed(1);
+  const rawText = point.raw === null || point.raw === undefined ? '--' : String(point.raw);
+  const sourceText = point.source === 'config' ? 'endpoint' : 'custom';
+  const noteText = point.label ? (' | ' + point.label) : '';
+  return `${percentText}% @ raw ${rawText} | ${sourceText}${noteText}`;
+}
+
+function bonsaiRenderCalibration(st) {
+  document.getElementById('bonsaiRawValue').textContent =
+    st.moisture_raw === null || st.moisture_raw === undefined ? '--' : String(st.moisture_raw);
+  document.getElementById('bonsaiMappedValue').textContent =
+    st.moisture === null || st.moisture === undefined ? '--' : (st.moisture + '%');
+
+  const points = Array.isArray(st.calibration_points) ? st.calibration_points : [];
+  const curveEl = document.getElementById('bonsaiCurvePoints');
+  if (!points.length) {
+    curveEl.textContent = 'No calibration anchors yet.';
+    return;
+  }
+  curveEl.innerHTML = points.map((point) => bonsaiFormatCurvePoint(point)).join('<br>');
+}
+
+function bonsaiFormatWateringEvent(w) {
+  const timestamp = new Date(w.timestamp).toLocaleString();
+  const before = w.before ?? '--';
+  const after = w.after ?? '--';
+  const duration = String(w.duration) + 's';
+  const stopReason = String(w.stop_reason || '');
+
+  if (w.mode === 'auto' && stopReason === 'pulse_complete') {
+    return `${timestamp} | auto pulse | ${duration} | ${before}% -> ${after}% | pulse finished, soak/check next`;
+  }
+  if (w.mode === 'auto' && stopReason === 'target_reached') {
+    return `${timestamp} | auto pulse | ${duration} | ${before}% -> ${after}% | target reached`;
+  }
+  if (w.mode === 'auto' && stopReason === 'session_budget_reached') {
+    return `${timestamp} | auto pulse | ${duration} | ${before}% -> ${after}% | session budget reached`;
+  }
+  return `${timestamp} | ${w.mode} | ${duration} | ${before}% -> ${after}% | ${stopReason}`;
+}
+
 async function bonsaiRefreshStatus() {
   const st = await api('/api/bonsai/status');
   bonsaiState = st;
@@ -1154,11 +1438,19 @@ async function bonsaiRefreshStatus() {
   document.getElementById('bonsaiMoisture').textContent = st.moisture === null ? '--' : (st.moisture + '%');
   document.getElementById('bonsaiStateText').textContent = bonsaiStatusText(st);
 
-  const pumpState = st.pump.running ? 'ON (' + st.pump.mode + ')' : 'OFF';
+  const pumpModeRaw = String((st.pump && st.pump.mode) || 'idle');
+  const pumpModeLabel = pumpModeRaw.replace(/-/g, ' ').toUpperCase();
+  const phaseRemaining = Number((st.pump && st.pump.remaining_seconds) || 0);
+  const sessionRemaining = Number((st.pump && st.pump.session_remaining_seconds) || phaseRemaining);
+  const sessionTotal = Number((st.pump && st.pump.session_total_seconds) || sessionRemaining);
+  const autoSessionRunning = st.pump.running && pumpModeRaw.startsWith('auto');
+  const pumpState = st.pump.running ? pumpModeLabel : 'OFF';
   document.getElementById('bonsaiPumpState').textContent = pumpState;
   let meta = '';
   if (st.pump.running) {
-    meta = 'Remaining: ' + st.pump.remaining_seconds + 's';
+    meta = autoSessionRunning
+      ? ('This phase: ' + phaseRemaining + 's | Budget left: ' + sessionRemaining + 's of ' + sessionTotal + 's')
+      : ('Remaining: ' + phaseRemaining + 's');
   } else if (st.pump.stop_reason) {
     meta = 'Last stop: ' + st.pump.stop_reason;
   }
@@ -1166,6 +1458,8 @@ async function bonsaiRefreshStatus() {
 
   bonsaiSetConfigInputs(st);
   bonsaiSetOfficeHoursSelectors(st);
+  bonsaiRenderAutoTimingSummary(st);
+  bonsaiRenderCalibration(st);
 
   const oledEnabled = !!st.oled_enabled;
   const oledDetected = !!st.display_ready;
@@ -1209,9 +1503,7 @@ async function bonsaiRefreshWaterings() {
     el.textContent = 'No waterings yet.';
     return;
   }
-  el.innerHTML = list.map(w =>
-    `${new Date(w.timestamp).toLocaleString()} | ${w.mode} | ${w.duration}s | ${w.before ?? '--'}% -> ${w.after ?? '--'}% | ${w.stop_reason || ''}`
-  ).join('<br>');
+  el.innerHTML = list.map((w) => bonsaiFormatWateringEvent(w)).join('<br>');
 }
 
 async function bonsaiToggleAuto() {
@@ -1260,11 +1552,43 @@ async function bonsaiReadNow() {
   await bonsaiRefreshLinkedDashboards();
 }
 
+async function bonsaiCaptureCalibration() {
+  const percent = parseFloat(document.getElementById('bonsaiCalPercent').value);
+  const label = document.getElementById('bonsaiCalLabel').value.trim();
+  if (Number.isNaN(percent)) {
+    document.getElementById('bonsaiCalMsg').textContent = 'Enter the percent this state should mean first.';
+    return;
+  }
+
+  const r = await api('/api/bonsai/calibration_point', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({percent, label})
+  });
+  document.getElementById('bonsaiCalMsg').textContent = r.message || 'Calibration anchor captured.';
+  setTimeout(() => document.getElementById('bonsaiCalMsg').textContent = '', 2400);
+  await bonsaiRefreshLinkedDashboards();
+}
+
+async function bonsaiResetCalibration() {
+  if (!window.confirm('Clear all custom moisture calibration anchors?')) return;
+  const r = await api('/api/bonsai/calibration_reset', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({})
+  });
+  document.getElementById('bonsaiCalMsg').textContent = r.message || 'Custom calibration anchors cleared.';
+  setTimeout(() => document.getElementById('bonsaiCalMsg').textContent = '', 2400);
+  await bonsaiRefreshLinkedDashboards();
+}
+
 async function bonsaiSaveSettings() {
   const cfg = {
     moisture_threshold_low: parseInt(document.getElementById('bonsaiLow').value, 10),
     moisture_threshold_high: parseInt(document.getElementById('bonsaiHigh').value, 10),
     watering_duration_seconds: parseInt(document.getElementById('bonsaiDur').value, 10),
+    auto_pulse_seconds: parseInt(document.getElementById('bonsaiPulse').value, 10),
+    auto_soak_seconds: parseInt(document.getElementById('bonsaiSoak').value, 10),
     min_water_interval_seconds: parseInt(document.getElementById('bonsaiIntv').value, 10),
     sensor_read_interval_seconds: parseInt(document.getElementById('bonsaiReadi').value, 10),
   };

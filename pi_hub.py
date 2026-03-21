@@ -915,10 +915,23 @@ async function masterRefresh() {
     masterSetText('masterBonsaiState', bonsaiState.toUpperCase());
 
     const pumpRunning = !!(bonsai.pump && bonsai.pump.running);
-    const pumpMode = pumpRunning ? String(bonsai.pump.mode || 'run').toUpperCase() : 'OFF';
-    const remaining = pumpRunning ? String(bonsai.pump.remaining_seconds || 0) + 's' : '--';
+    const pumpModeRaw = String((bonsai.pump && bonsai.pump.mode) || 'run');
+    const pumpMode = pumpRunning ? pumpModeRaw.replace(/-/g, ' ').toUpperCase() : 'OFF';
+    const phaseRemaining = Number((bonsai.pump && bonsai.pump.remaining_seconds) || 0);
+    const sessionRemaining = Number((bonsai.pump && bonsai.pump.session_remaining_seconds) || phaseRemaining);
+    const autoSessionRunning = pumpRunning && pumpModeRaw.startsWith('auto');
+    const remaining = pumpRunning
+      ? String(autoSessionRunning ? sessionRemaining : phaseRemaining) + 's'
+      : '--';
     masterSetText('masterPumpKpi', pumpMode);
-    masterSetText('masterPumpMeta', pumpRunning ? ('Remaining: ' + remaining) : 'Idle');
+    masterSetText(
+      'masterPumpMeta',
+      pumpRunning
+        ? (autoSessionRunning
+            ? ('Phase: ' + phaseRemaining + 's | Budget left: ' + sessionRemaining + 's')
+            : ('Remaining: ' + phaseRemaining + 's'))
+        : 'Idle'
+    );
     masterSetText('masterBonsaiPumpMode', pumpMode);
     masterSetText('masterBonsaiPumpRemaining', remaining);
 
