@@ -2583,6 +2583,19 @@ async function updateHubModules(alreadyPrompted=false) {
             plugin_init=plugin_init,
         )
 
+    @app.route("/health")
+    def health():
+        plugin_ids = [getattr(plugin, "plugin_id", plugin.__class__.__name__) for plugin in plugins]
+        return jsonify(
+            {
+                "ok": True,
+                "service": "bonsai-pi-hub",
+                "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
+                "build": get_hub_build_label(),
+                "plugins": sorted(plugin_ids),
+            }
+        )
+
     @app.route("/api/plugins")
     def api_plugins():
         items = []
