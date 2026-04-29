@@ -675,83 +675,72 @@ class HomeAssistantPlugin:
 
   <div class="card">
     <div class="panel-title"><span class="material-symbols-rounded label-icon">speaker</span>Speakers</div>
-    <div class="row" style="margin-top:8px;">
-      <span class="small muted"><span class="material-symbols-rounded label-icon">speaker</span>Speaker L:</span>
-      <button class="btn control-btn" onclick="haSetSpeaker('left', true)">ON</button>
-      <button class="btn gray control-btn" onclick="haSetSpeaker('left', false)">OFF</button>
-      <span id="haSpeakerLeftState" class="small muted">n/a</span>
+    <div id="haSpeakerVisual" style="margin:8px 0;"></div>
+    <div class="ha-device-row" id="haSpeakerLeftRow">
+      <span class="material-symbols-rounded ha-device-icon">speaker</span>
+      <span class="ha-device-label">Speaker Left</span>
+      <div id="haSpeakerLeftToggle"></div>
     </div>
-
-    <div class="row" style="margin-top:8px;">
-      <span class="small muted"><span class="material-symbols-rounded label-icon">speaker</span>Speaker R:</span>
-      <button class="btn control-btn" onclick="haSetSpeaker('right', true)">ON</button>
-      <button class="btn gray control-btn" onclick="haSetSpeaker('right', false)">OFF</button>
-      <span id="haSpeakerRightState" class="small muted">n/a</span>
+    <div class="ha-device-row" id="haSpeakerRightRow">
+      <span class="material-symbols-rounded ha-device-icon">speaker</span>
+      <span class="ha-device-label">Speaker Right</span>
+      <div id="haSpeakerRightToggle"></div>
     </div>
-
-    <div class="row" style="margin-top:8px;">
-      <span class="small muted"><span class="material-symbols-rounded label-icon">surround_sound</span>Both speakers:</span>
-      <button id="haBothSpeakersBtn" class="btn control-btn" onclick="haToggleBothSpeakers()">Toggle</button>
-      <span id="haBothSpeakersState" class="small muted">n/a</span>
+    <div class="ha-device-row">
+      <span class="material-symbols-rounded ha-device-icon">surround_sound</span>
+      <span class="ha-device-label">Both Speakers</span>
+      <button id="haBothSpeakersBtn" class="btn control-btn" onclick="haToggleBothSpeakers()" style="padding:6px 14px;font-size:12px;">Toggle</button>
     </div>
   </div>
 
   <div class="card">
-    <div class="panel-title"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamps, Scenes, and Dimmer</div>
-    <div class="row" style="margin-top:8px;">
-      <span class="small muted"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamp L:</span>
-      <button id="haLampLeftBtn" class="btn control-btn" onclick="haToggleLamp('left')">N/A</button>
-      <span id="haLampLeftState" class="small muted">n/a</span>
+    <div class="panel-title"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamps, Scenes & Dimmer</div>
+    <div class="ha-device-row" id="haLampLeftRow">
+      <span class="material-symbols-rounded ha-device-icon">lightbulb</span>
+      <span class="ha-device-label">Lamp Left</span>
+      <div id="haLampLeftToggle"></div>
+    </div>
+    <div class="ha-device-row" id="haLampRightRow">
+      <span class="material-symbols-rounded ha-device-icon">lightbulb</span>
+      <span class="ha-device-label">Lamp Right</span>
+      <div id="haLampRightToggle"></div>
+    </div>
+    <div class="ha-device-row">
+      <span class="material-symbols-rounded ha-device-icon">wb_incandescent</span>
+      <span class="ha-device-label">Both Lamps</span>
+      <button id="haBothLampsBtn" class="btn control-btn" onclick="haToggleBothLamps()" style="padding:6px 14px;font-size:12px;">Toggle</button>
     </div>
 
-    <div class="row" style="margin-top:8px;">
-      <span class="small muted"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamp R:</span>
-      <button id="haLampRightBtn" class="btn control-btn" onclick="haToggleLamp('right')">N/A</button>
-      <span id="haLampRightState" class="small muted">n/a</span>
+    <div style="margin-top:14px;">
+      <div class="small muted" style="margin-bottom:8px;"><span class="material-symbols-rounded label-icon">palette</span>Lamp Colors</div>
+      <div class="head-palette-row">
+        <button id="haPaletteCool" class="btn control-btn palette-btn preset-cool" onclick="haSetLampPalette('cool')">COOL</button>
+        <button id="haPaletteMoney" class="btn control-btn palette-btn preset-money" onclick="haSetLampPalette('money')">MONEY</button>
+        <button id="haPaletteWarm" class="btn control-btn palette-btn preset-warm" onclick="haSetLampPalette('warm')">WARM</button>
+        <button id="haPaletteCandle" class="btn control-btn palette-btn preset-candle" onclick="haSetLampPalette('candle')">CANDLE</button>
+      </div>
+      <div id="haLampPaletteMsg" class="small muted" style="margin-top:4px;"></div>
+      <div id="haLampPaletteLast" class="small muted" style="margin-top:4px;"></div>
     </div>
 
-    <div class="row" style="margin-top:8px;">
-      <span class="small muted"><span class="material-symbols-rounded label-icon">wb_incandescent</span>Both lamps:</span>
-      <button id="haBothLampsBtn" class="btn control-btn" onclick="haToggleBothLamps()">Toggle</button>
-      <span id="haBothLampsState" class="small muted">n/a</span>
+    <div style="margin-top:14px;">
+      <div class="small muted" style="margin-bottom:6px;"><span class="material-symbols-rounded label-icon">gradient</span>Gradient Effect</div>
+      <div class="row" style="align-items:center;">
+        <select id="haLampEffect" class="wide" style="max-width:320px;"></select>
+        <button id="haLampEffectBtn" class="btn control-btn" onclick="haApplyLampEffect()">Apply</button>
+      </div>
+      <div id="haLampEffectCurrent" class="small muted" style="margin-top:4px;">Current effect: --</div>
+      <div id="haLampEffectMsg" class="small muted" style="margin-top:4px;"></div>
     </div>
 
-    <div class="row" style="margin-top:12px;">
-      <span class="small muted"><span class="material-symbols-rounded label-icon">palette</span>Lamp colors:</span>
-      <button
-        class="btn control-btn preset-btn preset-cool"
-        onclick="haSetLampPalette('cool')"
-      >COOL</button>
-      <button
-        class="btn control-btn preset-btn preset-money"
-        onclick="haSetLampPalette('money')"
-      >MONEY</button>
-      <button
-        class="btn control-btn preset-btn preset-warm"
-        onclick="haSetLampPalette('warm')"
-      >WARM</button>
-      <button
-        class="btn control-btn preset-btn preset-candle"
-        onclick="haSetLampPalette('candle')"
-      >CANDLE</button>
-      <span id="haLampPaletteMsg" class="small muted"></span>
+    <div style="margin-top:14px;">
+      <div class="small muted" style="margin-bottom:6px;"><span class="material-symbols-rounded label-icon">tune</span>Dimmer</div>
+      <div class="row" style="align-items:center;gap:12px;">
+        <input id="haLampDimmer" type="range" min="1" max="100" step="1" value="80" class="dimmer-slider" oninput="haLampDimmerInputChanged()">
+        <span id="haLampDimmerValue" class="status-pill status-warn" style="min-width:48px;text-align:center;">80%</span>
+      </div>
+      <div id="haLampDimmerMsg" class="small muted" style="margin-top:6px;"></div>
     </div>
-    <div id="haLampPaletteLast" class="small muted" style="margin-top:6px;"></div>
-
-    <div class="row" style="margin-top:12px; align-items:center;">
-      <span class="small muted"><span class="material-symbols-rounded label-icon">gradient</span>Gradient effect:</span>
-      <select id="haLampEffect" class="wide" style="max-width:320px;"></select>
-      <button id="haLampEffectBtn" class="btn control-btn" onclick="haApplyLampEffect()">Apply Effect</button>
-    </div>
-    <div id="haLampEffectCurrent" class="small muted" style="margin-top:6px;">Current effect: --</div>
-    <div id="haLampEffectMsg" class="small muted" style="margin-top:6px;"></div>
-
-    <div class="row" style="margin-top:12px; align-items:center;">
-      <span class="small muted"><span class="material-symbols-rounded label-icon">tune</span>Dimmer:</span>
-      <input id="haLampDimmer" type="range" min="1" max="100" step="1" value="80" oninput="haLampDimmerInputChanged()">
-      <span id="haLampDimmerValue" class="status-pill status-warn">80%</span>
-    </div>
-    <div id="haLampDimmerMsg" class="small muted" style="margin-top:8px;"></div>
   </div>
 
   <div class="card">
@@ -896,14 +885,41 @@ async function haRefreshStatus() {
       conn.className = 'status-pill status-warn';
     }
 
-    document.getElementById('haSpeakerLeftState').textContent = 'State: ' + (st.speaker_left_state || 'n/a');
-    document.getElementById('haSpeakerRightState').textContent = 'State: ' + (st.speaker_right_state || 'n/a');
-    document.getElementById('haLampLeftState').textContent = 'State: ' + (st.lamp_left_state || 'n/a');
-    document.getElementById('haLampRightState').textContent = 'State: ' + (st.lamp_right_state || 'n/a');
+    // Toggle switches for speakers
+    const speakerLeftOn = haNormalizeBinaryState(st.speaker_left_state);
+    const speakerRightOn = haNormalizeBinaryState(st.speaker_right_state);
+    if (typeof renderToggle === 'function') {
+      renderToggle('haSpeakerLeftToggle', speakerLeftOn, "haSetSpeaker('left', " + (speakerLeftOn ? 'false' : 'true') + ")");
+      renderToggle('haSpeakerRightToggle', speakerRightOn, "haSetSpeaker('right', " + (speakerRightOn ? 'false' : 'true') + ")");
+    }
+    // Speaker visual indicator
+    if (typeof renderSpeakerVisual === 'function') {
+      renderSpeakerVisual('haSpeakerVisual', speakerLeftOn, speakerRightOn);
+    }
+    // Active row styling
+    const splRow = document.getElementById('haSpeakerLeftRow');
+    const sprRow = document.getElementById('haSpeakerRightRow');
+    if (splRow) splRow.classList.toggle('active', speakerLeftOn === true);
+    if (sprRow) sprRow.classList.toggle('active', speakerRightOn === true);
+
+    // Toggle switches for lamps
     const lampLeftState = haNormalizeBinaryState(st.lamp_left_state);
     const lampRightState = haNormalizeBinaryState(st.lamp_right_state);
-    haSetBinaryToggleButton('haLampLeftBtn', lampLeftState, 'ON', 'OFF', 'N/A');
-    haSetBinaryToggleButton('haLampRightBtn', lampRightState, 'ON', 'OFF', 'N/A');
+    if (typeof renderToggle === 'function') {
+      renderToggle('haLampLeftToggle', lampLeftState, "haToggleLamp('left')");
+      renderToggle('haLampRightToggle', lampRightState, "haToggleLamp('right')");
+    }
+    const llRow = document.getElementById('haLampLeftRow');
+    const lrRow = document.getElementById('haLampRightRow');
+    if (llRow) llRow.classList.toggle('active', lampLeftState === true);
+    if (lrRow) lrRow.classList.toggle('active', lampRightState === true);
+
+    // Palette active state
+    const activePalette = String(st.lamp_palette_last || '').toLowerCase();
+    ['cool','money','warm','candle'].forEach(p => {
+      const btn = document.getElementById('haPalette' + p.charAt(0).toUpperCase() + p.slice(1));
+      if (btn) btn.classList.toggle('is-active', activePalette === p);
+    });
 
     const dimmer = document.getElementById('haLampDimmer');
     const brightness = Number(st.lamp_brightness_last || 80);
@@ -915,22 +931,20 @@ async function haRefreshStatus() {
       ? ('Last preset: ' + String(st.lamp_palette_last).toUpperCase())
       : 'No lamp color preset applied yet.';
 
-    const bothSpeakersOn = String(st.speaker_left_state).toLowerCase() === 'on' && String(st.speaker_right_state).toLowerCase() === 'on';
+    const bothSpeakersOn = speakerLeftOn === true && speakerRightOn === true;
     const bothSpeakersBtn = document.getElementById('haBothSpeakersBtn');
-    bothSpeakersBtn.textContent = bothSpeakersOn ? 'TURN BOTH OFF' : 'TURN BOTH ON';
-    bothSpeakersBtn.classList.toggle('state-danger', bothSpeakersOn);
-    bothSpeakersBtn.classList.toggle('state-action', !bothSpeakersOn);
-    document.getElementById('haBothSpeakersState').textContent = bothSpeakersOn ? 'Both ON' : 'One/Both OFF';
+    if (bothSpeakersBtn) {
+      bothSpeakersBtn.textContent = bothSpeakersOn ? 'TURN BOTH OFF' : 'TURN BOTH ON';
+      bothSpeakersBtn.classList.toggle('state-danger', bothSpeakersOn);
+      bothSpeakersBtn.classList.toggle('state-action', !bothSpeakersOn);
+    }
 
     const bothLampsBtn = document.getElementById('haBothLampsBtn');
     const lampAnyOn = lampLeftState === true || lampRightState === true;
-    bothLampsBtn.textContent = lampAnyOn ? 'TURN BOTH OFF' : 'TURN BOTH ON';
-    bothLampsBtn.classList.toggle('state-danger', lampAnyOn);
-    bothLampsBtn.classList.toggle('state-action', !lampAnyOn);
-    if (lampLeftState === null && lampRightState === null) {
-      document.getElementById('haBothLampsState').textContent = 'State unavailable';
-    } else {
-      document.getElementById('haBothLampsState').textContent = lampAnyOn ? 'One/Both ON' : 'Both OFF';
+    if (bothLampsBtn) {
+      bothLampsBtn.textContent = lampAnyOn ? 'TURN BOTH OFF' : 'TURN BOTH ON';
+      bothLampsBtn.classList.toggle('state-danger', lampAnyOn);
+      bothLampsBtn.classList.toggle('state-action', !lampAnyOn);
     }
 
     haSyncLampEffectControls(st);
@@ -963,8 +977,7 @@ async function haSaveConfig() {
   });
 
   document.getElementById('haToken').value = '';
-  document.getElementById('haSaveMsg').textContent = r.ok ? 'HA settings saved.' : 'Save failed.';
-  setTimeout(() => document.getElementById('haSaveMsg').textContent = '', 2000);
+  if (typeof Toast !== 'undefined') { r.ok ? Toast.success('HA settings saved.') : Toast.error('Save failed.'); }
   await haRefreshStatus();
 }
 
@@ -987,10 +1000,7 @@ async function haSetSpeaker(side, on, silent=false) {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({side, on}),
   });
-  if (!silent) {
-    document.getElementById('haSaveMsg').textContent = r.message || 'Done';
-    setTimeout(() => document.getElementById('haSaveMsg').textContent = '', 2000);
-  }
+  if (!silent && typeof Toast !== 'undefined') Toast.success(r.message || 'Speaker ' + side + (on ? ' ON' : ' OFF'));
   await haRefreshStatus();
 }
 
@@ -1001,8 +1011,7 @@ async function haToggleBothSpeakers() {
   const left = haSetSpeaker('left', targetOn, true);
   const right = haSetSpeaker('right', targetOn, true);
   await Promise.allSettled([left, right]);
-  document.getElementById('haSaveMsg').textContent = targetOn ? 'Both speakers ON.' : 'Both speakers OFF.';
-  setTimeout(() => document.getElementById('haSaveMsg').textContent = '', 2000);
+  if (typeof Toast !== 'undefined') Toast.success(targetOn ? 'Both speakers ON.' : 'Both speakers OFF.');
   await haRefreshStatus();
 }
 
@@ -1012,10 +1021,7 @@ async function haSetLamp(side, on, silent=false) {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({side, on}),
   });
-  if (!silent) {
-    document.getElementById('haSaveMsg').textContent = r.message || 'Done';
-    setTimeout(() => document.getElementById('haSaveMsg').textContent = '', 2000);
-  }
+  if (!silent && typeof Toast !== 'undefined') Toast.success(r.message || 'Lamp ' + side + (on ? ' ON' : ' OFF'));
   await haRefreshStatus();
 }
 
@@ -1025,8 +1031,7 @@ async function haToggleLamp(side) {
     ? haNormalizeBinaryState(st.lamp_left_state)
     : haNormalizeBinaryState(st.lamp_right_state);
   if (current === null) {
-    document.getElementById('haSaveMsg').textContent = 'Lamp state unavailable.';
-    setTimeout(() => document.getElementById('haSaveMsg').textContent = '', 2200);
+    if (typeof Toast !== 'undefined') Toast.error('Lamp state unavailable.');
     return;
   }
   await haSetLamp(side, !current);
@@ -1044,13 +1049,11 @@ async function haToggleBothLamps() {
     body: JSON.stringify({on: targetOn}),
   });
   if (!r.ok) {
-    document.getElementById('haSaveMsg').textContent = r.message || 'Lamp update failed.';
-    setTimeout(() => document.getElementById('haSaveMsg').textContent = '', 2500);
+    if (typeof Toast !== 'undefined') Toast.error(r.message || 'Lamp update failed.');
     await haRefreshStatus();
     return;
   }
-  document.getElementById('haSaveMsg').textContent = targetOn ? 'Both lamps ON.' : 'Both lamps OFF.';
-  setTimeout(() => document.getElementById('haSaveMsg').textContent = '', 2000);
+  if (typeof Toast !== 'undefined') Toast.success(targetOn ? 'Both lamps ON.' : 'Both lamps OFF.');
   await haRefreshStatus();
 }
 

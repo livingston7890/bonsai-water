@@ -36,7 +36,8 @@ DEFAULT_CONFIG = {
     "moisture_curve_points": [],
     "moisture_sample_count": 7,
     "moisture_sample_delay_ms": 40,
-    "moisture_ema_alpha": 0.35,
+    "moisture_ema_alpha": 0.5,
+    "settle_delay_seconds": 30,
     "watering_duration_seconds": 60,
     "auto_pulse_seconds": 15,
     "auto_soak_seconds": 90,
@@ -86,6 +87,10 @@ class BonsaiPlugin:
 
         self._shutdown = threading.Event()
         self._pump_stop_requested = threading.Event()
+
+        # Adaptive polling state
+        self._recent_readings: list[float] = []
+        self._fast_poll_count: int = 0
 
         self.monitor_thread: Optional[threading.Thread] = None
         self.pump_thread: Optional[threading.Thread] = None
@@ -185,16 +190,20 @@ class BonsaiPlugin:
         self._ensure_column(conn, "watering_events", "moisture_after", "moisture_after REAL")
         self._ensure_column(conn, "watering_events", "mode", "mode TEXT NOT NULL DEFAULT 'manual'")
         self._ensure_column(conn, "watering_events", "stop_reason", "stop_reason TEXT")
+        self._ensure_column(conn, "moisture_readings", "moisture_raw", "moisture_raw INTEGER")
 
-    def _log_moisture(self, moisture_percent: float) -> None:
+    def _log_moisture(self, moisture_percent: float, moisture_raw: Optional[int] = None) -> None:
         conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO moisture_readings (timestamp, moisture_percent) VALUES (?, ?)",
-            (datetime.now().isoformat(), moisture_percent),
-        )
-        conn.commit()
-        conn.close()
+        try:
+            self._migrate_db(conn)
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO moisture_readings (timestamp, moisture_percent, moisture_raw) VALUES (?, ?, ?)",
+                (datetime.now().isoformat(), moisture_percent, moisture_raw),
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
     def _log_watering(
         self,
@@ -231,15 +240,18 @@ class BonsaiPlugin:
 
     def get_recent_readings(self, hours: int = 48) -> list[dict]:
         conn = sqlite3.connect(self.db_file)
-        c = conn.cursor()
-        cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
-        c.execute(
-            "SELECT timestamp, moisture_percent FROM moisture_readings WHERE timestamp > ? ORDER BY timestamp",
-            (cutoff,),
-        )
-        rows = c.fetchall()
-        conn.close()
-        return [{"timestamp": r[0], "moisture": r[1]} for r in rows]
+        try:
+            self._migrate_db(conn)
+            c = conn.cursor()
+            cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
+            c.execute(
+                "SELECT timestamp, moisture_percent, moisture_raw FROM moisture_readings WHERE timestamp > ? ORDER BY timestamp",
+                (cutoff,),
+            )
+            rows = c.fetchall()
+        finally:
+            conn.close()
+        return [{"timestamp": r[0], "moisture": r[1], "raw": r[2]} for r in rows]
 
     def get_recent_waterings(self, count: int = 20) -> list[dict]:
         conn = sqlite3.connect(self.db_file)
@@ -469,7 +481,8 @@ class BonsaiPlugin:
             return
         with self.lock:
             self.current_moisture = moisture
-        self._log_moisture(moisture)
+            raw = self.current_moisture_raw
+        self._log_moisture(moisture, raw)
 
     def _update_display(self, status: str) -> None:
         if self.display is None:
@@ -521,11 +534,35 @@ class BonsaiPlugin:
             return
         GPIO.output(RELAY_PIN, PUMP_ON_LEVEL if on else PUMP_OFF_LEVEL)
 
+    def _positive_int_config(self, key: str, default: int, max_value: Optional[int] = None) -> int:
+        try:
+            with self.lock:
+                raw_value = self.config.get(key, default)
+            value = int(raw_value)
+        except Exception:
+            value = int(default)
+        if max_value is not None:
+            value = min(value, int(max_value))
+        return max(1, value)
+
+    def _pump_safety_cap_seconds(self) -> int:
+        return self._positive_int_config(
+            "pump_max_runtime_seconds",
+            int(DEFAULT_CONFIG["pump_max_runtime_seconds"]),
+            max_value=3600,
+        )
+
     def _pump_worker(self, mode: str, requested_seconds: int, moisture_before: Optional[float]) -> None:
-        max_auto = int(self.config["pump_max_runtime_seconds"])
-        max_manual = int(self.config["manual_max_runtime_seconds"])
-        max_allowed = max_manual if mode == "manual" else max_auto
-        run_seconds = max(1, min(int(requested_seconds), max_allowed))
+        pump_safety_cap = self._pump_safety_cap_seconds()
+        max_manual = self._positive_int_config(
+            "manual_max_runtime_seconds",
+            int(DEFAULT_CONFIG["manual_max_runtime_seconds"]),
+            max_value=pump_safety_cap,
+        )
+        if mode == "manual":
+            run_seconds = max(1, min(int(requested_seconds), max_manual))
+        else:
+            run_seconds = max(1, min(int(requested_seconds), pump_safety_cap))
 
         with self.lock:
             self.pump.running = True
@@ -549,7 +586,7 @@ class BonsaiPlugin:
                 with self.lock:
                     self.pump.session_remaining_seconds = max(0.0, (started + run_seconds) - time.time())
                 if time.time() >= started + run_seconds:
-                    stop_reason = "safety_timeout" if mode == "manual" else "completed"
+                    stop_reason = "safety_timeout" if mode == "manual" or int(requested_seconds) > run_seconds else "completed"
                     break
                 time.sleep(0.1)
         except Exception as exc:
@@ -625,10 +662,18 @@ class BonsaiPlugin:
         return not self._shutdown.is_set()
 
     def _auto_pulse_worker(self, total_budget_seconds: int, moisture_before: Optional[float]) -> None:
-        max_auto = int(self.config["pump_max_runtime_seconds"])
-        total_budget = max(1, min(int(total_budget_seconds), max_auto))
+        requested_budget = max(1, int(total_budget_seconds))
+        pump_safety_cap = self._pump_safety_cap_seconds()
+        total_budget = min(requested_budget, pump_safety_cap)
+        cap_limited = requested_budget > total_budget
+        if requested_budget > total_budget:
+            print(
+                f"[BONSAI] Auto session budget clamped from {requested_budget}s "
+                f"to pump safety cap {total_budget}s"
+            )
         pulse_seconds_default = max(1, int(self.config.get("auto_pulse_seconds", 15)))
         soak_seconds = max(10, int(self.config.get("auto_soak_seconds", 90)))
+        settle_seconds = max(0, min(120, int(self.config.get("settle_delay_seconds", 30))))
         target_moisture = float(self.config.get("moisture_threshold_high", 65))
 
         with self.lock:
@@ -643,7 +688,7 @@ class BonsaiPlugin:
         remaining_budget = total_budget
         pulse_count = 0
         total_watered_seconds = 0.0
-        final_reason = "session_budget_reached"
+        final_reason = "safety_timeout" if cap_limited else "session_budget_reached"
         last_moisture = moisture_before
 
         try:
@@ -699,6 +744,16 @@ class BonsaiPlugin:
                 elapsed = round(time.time() - pulse_started, 1)
                 remaining_budget = max(0, remaining_budget - pulse_seconds)
                 total_watered_seconds += elapsed
+
+                # Wait for water to reach sensor before reading
+                if settle_seconds > 0:
+                    with self.lock:
+                        self.pump.mode = f"auto-settle {pulse_count}"
+                    print(f"[BONSAI] Settle wait {settle_seconds}s before reading")
+                    if not self._sleep_interruptible(settle_seconds):
+                        final_reason = "manual_stop" if self._pump_stop_requested.is_set() else "shutdown"
+                        break
+
                 moisture_after_pulse = self._read_moisture(use_smoothing=False)
                 self._record_moisture_sample(moisture_after_pulse)
 
@@ -709,8 +764,8 @@ class BonsaiPlugin:
                     pulse_reason = "target_reached"
                     final_reason = "target_reached"
                 elif remaining_budget <= 0:
-                    pulse_reason = "session_budget_reached"
-                    final_reason = "session_budget_reached"
+                    pulse_reason = "safety_timeout" if cap_limited else "session_budget_reached"
+                    final_reason = pulse_reason
 
                 self._log_watering(elapsed, last_moisture, moisture_after_pulse, "auto", pulse_reason)
                 if moisture_after_pulse is not None:
@@ -786,6 +841,24 @@ class BonsaiPlugin:
             return start_hour <= hour_value < end_hour
         return hour_value >= start_hour or hour_value < end_hour
 
+    def _trend_projects_below(self, readings: list[float], threshold: float) -> bool:
+        """Return True if last 3+ readings are falling and project below threshold within one interval."""
+        if len(readings) < 3:
+            return False
+        recent = readings[-3:]
+        if not (recent[0] > recent[1] > recent[2]):
+            return False
+        slope = (recent[2] - recent[0]) / 2.0
+        projected = recent[2] + slope
+        return projected < threshold
+
+    def _trend_is_stable_or_rising(self, readings: list[float]) -> bool:
+        """Return True if last 3 readings are flat or rising (suppress noise triggers)."""
+        if len(readings) < 3:
+            return False
+        recent = readings[-3:]
+        return recent[2] >= recent[0] - 1.5
+
     def monitor_loop(self) -> None:
         print("[BONSAI] monitor loop started")
         while not self._shutdown.is_set():
@@ -795,6 +868,9 @@ class BonsaiPlugin:
             moisture = self._read_moisture()
             if moisture is not None:
                 self._record_moisture_sample(moisture)
+                self._recent_readings.append(moisture)
+                if len(self._recent_readings) > 10:
+                    self._recent_readings = self._recent_readings[-10:]
                 print(f"[BONSAI] Moisture: {moisture}%")
 
             status = "WAIT"
@@ -821,12 +897,33 @@ class BonsaiPlugin:
                 with self.lock:
                     interval_ok = (now - self.last_water_time) >= cfg["min_water_interval_seconds"]
                     idle = not self.pump.running
-                needs_water = m < cfg["moisture_threshold_low"]
+                threshold_low = cfg["moisture_threshold_low"]
                 blocked_by_hours = self._is_office_hours_blocked()
+                below_threshold = m < threshold_low
+                trend_trigger = self._trend_projects_below(self._recent_readings, threshold_low)
+                stable_near_threshold = below_threshold and self._trend_is_stable_or_rising(self._recent_readings)
+                needs_water = (below_threshold and not stable_near_threshold) or trend_trigger
                 if needs_water and interval_ok and idle and not blocked_by_hours:
+                    reason = "trend_projection" if trend_trigger and not below_threshold else "below_threshold"
+                    print(f"[BONSAI] Auto trigger: {reason} (moisture={m}%, threshold={threshold_low}%)")
                     self.start_auto_cycle(int(cfg["watering_duration_seconds"]))
 
-            sleep_seconds = max(30, int(cfg["sensor_read_interval_seconds"]))
+            # Adaptive polling: speed up when readings are changing fast
+            normal_interval = max(30, int(cfg["sensor_read_interval_seconds"]))
+            fast_interval = 60
+            if len(self._recent_readings) >= 2:
+                delta = abs(self._recent_readings[-1] - self._recent_readings[-2])
+                if delta > 3.0:
+                    self._fast_poll_count = 0
+                    sleep_seconds = fast_interval
+                elif self._fast_poll_count < 3:
+                    self._fast_poll_count += 1
+                    sleep_seconds = fast_interval
+                else:
+                    sleep_seconds = normal_interval
+            else:
+                sleep_seconds = normal_interval
+
             for _ in range(sleep_seconds):
                 if self._shutdown.is_set():
                     break
@@ -1102,62 +1199,82 @@ class BonsaiPlugin:
     def dashboard_html(self) -> str:
         return """
   <div class="card">
-    <div class="row" style="justify-content: space-between; align-items: flex-start;">
-      <div>
-        <div class="panel-title-row">
-          <span class="material-symbols-rounded panel-title-icon">eco</span>
-          <div class="panel-title" style="margin-bottom:0;">Bonsai Monitor</div>
+    <div class="panel-title-row">
+      <span class="material-symbols-rounded panel-title-icon">eco</span>
+      <div class="panel-title" style="margin-bottom:0;">Bonsai Monitor</div>
+    </div>
+    <div class="panel-meta">Soil moisture sensing, pump safety, and OLED sync.</div>
+    <div class="bonsai-monitor-layout">
+      <div id="bonsaiMoistureRing"></div>
+      <div class="bonsai-monitor-info">
+        <div id="bonsaiStateText" style="font-size:14px;font-weight:700;margin-bottom:4px;">Loading...</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <div id="bonsaiDryEstimate" class="small muted" style="font-size:12px;"></div>
         </div>
-        <div class="panel-meta">Soil moisture sensing, pump safety, and OLED sync.</div>
-        <div class="kpi" id="bonsaiMoisture">--</div>
-        <div id="bonsaiStateText" class="small muted">Loading...</div>
-      </div>
-      <div>
-        <div class="small muted"><span class="material-symbols-rounded label-icon">bolt</span>Pump</div>
-        <div id="bonsaiPumpState" style="font-size:22px;font-weight:800;">OFF</div>
-        <div id="bonsaiPumpMeta" class="small muted"></div>
+        <div class="bonsai-pump-section">
+          <div class="small muted"><span class="material-symbols-rounded label-icon">bolt</span>Pump</div>
+          <div id="bonsaiPumpState" class="bonsai-pump-value">OFF</div>
+          <div id="bonsaiPumpMeta" class="small muted"></div>
+        </div>
       </div>
     </div>
+    <div id="bonsaiMoistureChart"></div>
   </div>
 
   <div class="card">
-    <div class="row">
-      <span class="panel-title" style="margin-bottom:0;"><span class="material-symbols-rounded label-icon">water_drop</span>Auto Watering</span>
-      <button id="bonsaiAutoBtn" class="btn control-btn" onclick="bonsaiToggleAuto()">Loading...</button>
-      <span id="bonsaiAutoMsg" class="small muted"></span>
+    <div class="toggle-card-row">
+      <span class="material-symbols-rounded toggle-card-icon">water_drop</span>
+      <div style="flex:1;">
+        <div class="toggle-card-title">Auto Watering</div>
+        <div class="toggle-card-meta">Moisture logging stays ON even when auto watering is OFF.</div>
+      </div>
+      <div id="bonsaiAutoToggle"></div>
     </div>
-    <div class="small muted" style="margin-top:8px;">Moisture logging stays ON even when auto watering is OFF.</div>
+    <span id="bonsaiAutoMsg" class="small muted" style="display:block;margin-top:6px;min-height:18px;"></span>
   </div>
 
   <div class="card">
-    <div class="row">
-      <span class="panel-title" style="margin-bottom:0;"><span class="material-symbols-rounded label-icon">play_circle</span>Manual Pump Run</span>
-      <button id="bonsaiManualBtn" class="btn control-btn" onclick="bonsaiToggleManual()">Loading...</button>
-      <span class="small muted">Stops any active run, including auto, or starts a manual run.</span>
+    <div class="toggle-card-row">
+      <span class="material-symbols-rounded toggle-card-icon">play_circle</span>
+      <div style="flex:1;">
+        <div class="toggle-card-title">Manual Pump Run</div>
+        <div class="toggle-card-meta">Stops any active run, including auto, or starts a manual run.</div>
+      </div>
+      <div id="bonsaiManualToggle"></div>
     </div>
-    <div id="bonsaiManualMsg" class="small muted" style="margin-top:8px;"></div>
+    <div id="bonsaiManualMsg" class="small muted" style="margin-top:6px;min-height:18px;"></div>
   </div>
 
   <div class="card">
-    <div class="row">
-      <span class="panel-title" style="margin-bottom:0;"><span class="material-symbols-rounded label-icon">sensors</span>Moisture Read</span>
+    <div class="toggle-card-row">
+      <span class="material-symbols-rounded toggle-card-icon">sensors</span>
+      <div style="flex:1;">
+        <div class="toggle-card-title">Moisture Read</div>
+        <div class="toggle-card-meta">Forces an immediate sample without waiting for the next interval.</div>
+      </div>
       <button id="bonsaiReadNowBtn" class="btn control-btn state-action" onclick="bonsaiReadNow()">READ NOW</button>
-      <span id="bonsaiReadMsg" class="small muted"></span>
     </div>
-    <div class="small muted" style="margin-top:8px;">Forces an immediate sample without waiting for the next interval.</div>
+    <span id="bonsaiReadMsg" class="small muted" style="display:block;margin-top:6px;min-height:18px;"></span>
   </div>
 
   <div class="card">
-    <div class="row">
-      <span class="panel-title" style="margin-bottom:0;"><span class="material-symbols-rounded label-icon">view_in_ar</span>OLED Display</span>
-      <button id="bonsaiOledBtn" class="btn control-btn" onclick="bonsaiToggleOled()">Loading...</button>
-      <span id="bonsaiOledMsg" class="small muted"></span>
+    <div class="toggle-card-row">
+      <span class="material-symbols-rounded toggle-card-icon">view_in_ar</span>
+      <div style="flex:1;">
+        <div class="toggle-card-title">OLED Display</div>
+        <div id="bonsaiOledState" class="toggle-card-meta">Checking OLED...</div>
+      </div>
+      <div id="bonsaiOledToggle"></div>
     </div>
-    <div id="bonsaiOledState" class="small muted" style="margin-top:8px;">Checking OLED...</div>
+    <span id="bonsaiOledMsg" class="small muted" style="display:block;margin-top:6px;min-height:18px;"></span>
   </div>
 
   <div class="card">
-    <div class="panel-title"><span class="material-symbols-rounded label-icon">tune</span>Thresholds & Timing</div>
+    <div class="panel-title" style="cursor:pointer;" onclick="toggleCollapsible('bonsaiTuningBody')">
+      <span class="material-symbols-rounded label-icon">tune</span>Thresholds & Timing
+      <span id="bonsaiTuningBodyChev" class="material-symbols-rounded collapsible-chevron" style="font-size:18px;margin-left:auto;opacity:0.5;">expand_more</span>
+    </div>
+    <div id="bonsaiTuningBody" class="collapsible-body">
     <div id="bonsaiAutoTimingSummary" class="small muted" style="margin-bottom:12px;">
       Auto session runs in short pulses until the target is reached or the session budget is used.
     </div>
@@ -1183,22 +1300,27 @@ class BonsaiPlugin:
         <input id="bonsaiSoak" type="number" min="10" max="600">
       </div>
       <div>
-        <div class="small muted"><span class="material-symbols-rounded label-icon">schedule</span>Min interval (s)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">schedule</span>Min time between waterings (s)</div>
         <input id="bonsaiIntv" type="number" min="60" max="86400">
       </div>
       <div>
-        <div class="small muted"><span class="material-symbols-rounded label-icon">sensors</span>Read interval (s)</div>
+        <div class="small muted"><span class="material-symbols-rounded label-icon">sensors</span>Sensor poll interval (s)</div>
         <input id="bonsaiReadi" type="number" min="30" max="3600">
       </div>
     </div>
     <div class="row" style="margin-top:12px;">
-      <button class="btn" onclick="bonsaiSaveSettings()">Save Settings</button>
+      <button class="btn" id="bonsaiSaveBtn" onclick="bonsaiSaveSettings()">Save Settings</button>
       <span id="bonsaiSaveMsg" class="small muted"></span>
+    </div>
     </div>
   </div>
 
   <div class="card">
-    <div class="panel-title"><span class="material-symbols-rounded label-icon">query_stats</span>Calibration Curve</div>
+    <div class="panel-title" style="cursor:pointer;" onclick="toggleCollapsible('bonsaiCalBody')">
+      <span class="material-symbols-rounded label-icon">query_stats</span>Calibration Curve
+      <span id="bonsaiCalBodyChev" class="material-symbols-rounded collapsible-chevron" style="font-size:18px;margin-left:auto;opacity:0.5;">expand_more</span>
+    </div>
+    <div id="bonsaiCalBody" class="collapsible-body">
     <div class="small muted">
       Capture the current raw sensor reading as the percent that feels true in the pot. These anchors shape the moisture curve between the dry and wet endpoints.
     </div>
@@ -1226,11 +1348,17 @@ class BonsaiPlugin:
       <span id="bonsaiCalMsg" class="small muted"></span>
     </div>
     <div id="bonsaiCurvePoints" class="small mono muted" style="margin-top:10px;">Loading calibration anchors...</div>
+    </div>
   </div>
 
   <div class="card">
-    <div class="panel-title" style="margin-bottom:8px;"><span class="material-symbols-rounded label-icon">history</span>Recent Waterings</div>
+    <div class="panel-title" style="margin-bottom:8px;cursor:pointer;" onclick="toggleCollapsible('bonsaiHistoryBody')">
+      <span class="material-symbols-rounded label-icon">history</span>Recent Waterings
+      <span id="bonsaiHistoryBodyChev" class="material-symbols-rounded collapsible-chevron" style="font-size:18px;margin-left:auto;opacity:0.5;">expand_more</span>
+    </div>
+    <div id="bonsaiHistoryBody" class="collapsible-body">
     <div id="bonsaiWaterings" class="small mono muted">Loading...</div>
+    </div>
   </div>
 
   <div class="card">
@@ -1294,6 +1422,20 @@ class BonsaiPlugin:
     def dashboard_js(self) -> str:
         return """
 let bonsaiState = null;
+let bonsaiResetPending = false;
+let bonsaiResetTimer = null;
+let bonsaiReadingsCache = null;
+let bonsaiReadingsLastFetchMs = 0;
+
+async function bonsaiFetchReadings() {
+  const nowMs = Date.now();
+  if (bonsaiReadingsCache && (nowMs - bonsaiReadingsLastFetchMs) < 60000) return bonsaiReadingsCache;
+  try {
+    const resp = await fetch('/api/bonsai/readings?hours=24');
+    if (resp.ok) { bonsaiReadingsCache = await resp.json(); bonsaiReadingsLastFetchMs = nowMs; }
+  } catch(e) {}
+  return bonsaiReadingsCache;
+}
 
 function bonsaiStatusText(st) {
   if (!st.gpio_ready) return 'GPIO not ready';
@@ -1378,14 +1520,19 @@ function bonsaiRenderAutoTimingSummary(st) {
   const el = document.getElementById('bonsaiAutoTimingSummary');
   if (!el || !st || !st.config) return;
   const budget = Number(st.config.watering_duration_seconds || 0);
+  const cap = Number(st.config.pump_max_runtime_seconds || 120);
+  const effectiveBudget = Math.max(0, Math.min(budget, cap || budget));
   const pulse = Number(st.config.auto_pulse_seconds || 0);
   const soak = Number(st.config.auto_soak_seconds || 0);
   const low = Number(st.config.moisture_threshold_low || 0);
   const high = Number(st.config.moisture_threshold_high || 0);
+  const capText = cap > 0 && budget > cap
+    ? ' Requested ' + budget + 's is capped by the ' + cap + 's pump safety limit.'
+    : ' Pump safety cap: ' + cap + 's.';
   el.textContent =
-    'Auto session uses up to ' + budget + 's of total pump-on time, in ' +
+    'Auto session uses up to ' + effectiveBudget + 's of total pump-on time, in ' +
     pulse + 's pulses with ' + soak + 's soak delays. It starts below ' +
-    low + '% and stops pulsing at ' + high + '%.';
+    low + '% and stops pulsing at ' + high + '%.' + capText;
 }
 
 function bonsaiFormatCurvePoint(point) {
@@ -1435,7 +1582,6 @@ async function bonsaiRefreshStatus() {
   const st = await api('/api/bonsai/status');
   bonsaiState = st;
 
-  document.getElementById('bonsaiMoisture').textContent = st.moisture === null ? '--' : (st.moisture + '%');
   document.getElementById('bonsaiStateText').textContent = bonsaiStatusText(st);
 
   const pumpModeRaw = String((st.pump && st.pump.mode) || 'idle');
@@ -1467,22 +1613,32 @@ async function bonsaiRefreshStatus() {
     ? (oledEnabled ? 'OLED is ON.' : 'OLED is OFF.')
     : 'OLED not detected.';
 
+  // Render ring gauge
+  const low = st.config ? st.config.moisture_threshold_low : 35;
+  const high = st.config ? st.config.moisture_threshold_high : 75;
+  if (typeof renderMoistureRing === 'function') {
+    renderMoistureRing('bonsaiMoistureRing', st.moisture, low, high);
+  }
+
+  // Render area chart and dry estimate
+  const readings = await bonsaiFetchReadings();
+  if (typeof renderMoistureChart === 'function') {
+    renderMoistureChart('bonsaiMoistureChart', readings, low, high);
+  }
+  if (typeof calcDryEstimate === 'function') {
+    const estimate = calcDryEstimate(readings, low);
+    const estEl = document.getElementById('bonsaiDryEstimate');
+    if (estEl) estEl.textContent = estimate || '';
+  }
+
+  // Toggle switches
   const autoOn = !!st.config.auto_watering_enabled;
-  const autoBtn = document.getElementById('bonsaiAutoBtn');
-  autoBtn.textContent = autoOn ? 'ON' : 'OFF';
-  autoBtn.classList.toggle('state-on', autoOn);
-  autoBtn.classList.toggle('state-off', !autoOn);
-
-  const manualRunning = !!(st.pump && st.pump.running);
-  const manualBtn = document.getElementById('bonsaiManualBtn');
-  manualBtn.textContent = manualRunning ? 'STOP' : 'START';
-  manualBtn.classList.toggle('state-danger', manualRunning);
-  manualBtn.classList.toggle('state-action', !manualRunning);
-
-  const oledBtn = document.getElementById('bonsaiOledBtn');
-  oledBtn.textContent = oledEnabled ? 'ON' : 'OFF';
-  oledBtn.classList.toggle('state-on', oledEnabled);
-  oledBtn.classList.toggle('state-off', !oledEnabled);
+  if (typeof renderToggle === 'function') {
+    renderToggle('bonsaiAutoToggle', autoOn, 'bonsaiToggleAuto()', {size: 'large'});
+    const manualRunning = !!(st.pump && st.pump.running);
+    renderToggle('bonsaiManualToggle', manualRunning, 'bonsaiToggleManual()', {onLabel: 'RUNNING', offLabel: 'IDLE', size: 'large'});
+    renderToggle('bonsaiOledToggle', oledEnabled, 'bonsaiToggleOled()', {size: 'large'});
+  }
 }
 
 async function bonsaiRefreshLinkedDashboards() {
@@ -1514,8 +1670,7 @@ async function bonsaiToggleAuto() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({enabled})
   });
-  document.getElementById('bonsaiAutoMsg').textContent = enabled ? 'Auto watering ON' : 'Auto watering OFF';
-  setTimeout(() => document.getElementById('bonsaiAutoMsg').textContent = '', 1500);
+  if (typeof Toast !== 'undefined') Toast.success(enabled ? 'Auto watering ON' : 'Auto watering OFF');
   await bonsaiRefreshLinkedDashboards();
 }
 
@@ -1527,8 +1682,7 @@ async function bonsaiToggleManual() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({enabled})
   });
-  document.getElementById('bonsaiManualMsg').textContent = r.message;
-  setTimeout(() => document.getElementById('bonsaiManualMsg').textContent = '', 2500);
+  if (typeof Toast !== 'undefined') Toast.success(r.message || (enabled ? 'Pump started' : 'Pump stopped'));
   await bonsaiRefreshLinkedDashboards();
   await bonsaiRefreshWaterings();
 }
@@ -1540,15 +1694,14 @@ async function bonsaiReadNow() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({})
     });
-    document.getElementById('bonsaiReadMsg').textContent = r.message || 'Moisture refreshed.';
+    if (typeof Toast !== 'undefined') Toast.success(r.message || 'Moisture refreshed.');
   } catch (err) {
     const raw = String((err && err.message) ? err.message : (err || 'Unknown error'));
     const msg = (raw.includes('404') || raw.includes('Not Found'))
-      ? 'Read endpoint missing on running server. Update Modules and restart.'
+      ? 'Read endpoint missing. Update Modules and restart.'
       : ('Read failed: ' + raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
-    document.getElementById('bonsaiReadMsg').textContent = msg;
+    if (typeof Toast !== 'undefined') Toast.error(msg);
   }
-  setTimeout(() => document.getElementById('bonsaiReadMsg').textContent = '', 2200);
   await bonsaiRefreshLinkedDashboards();
 }
 
@@ -1565,20 +1718,30 @@ async function bonsaiCaptureCalibration() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({percent, label})
   });
-  document.getElementById('bonsaiCalMsg').textContent = r.message || 'Calibration anchor captured.';
-  setTimeout(() => document.getElementById('bonsaiCalMsg').textContent = '', 2400);
+  if (typeof Toast !== 'undefined') Toast.success(r.message || 'Calibration anchor captured.');
   await bonsaiRefreshLinkedDashboards();
 }
 
 async function bonsaiResetCalibration() {
-  if (!window.confirm('Clear all custom moisture calibration anchors?')) return;
+  const btn = event && event.target;
+  if (!bonsaiResetPending) {
+    bonsaiResetPending = true;
+    if (btn) { btn.textContent = 'Confirm Clear?'; btn.style.borderColor = 'var(--bad)'; btn.style.color = 'var(--bad)'; }
+    bonsaiResetTimer = setTimeout(() => {
+      bonsaiResetPending = false;
+      if (btn) { btn.textContent = 'Clear Custom Anchors'; btn.style.borderColor = ''; btn.style.color = ''; }
+    }, 3000);
+    return;
+  }
+  bonsaiResetPending = false;
+  if (bonsaiResetTimer) clearTimeout(bonsaiResetTimer);
+  if (btn) { btn.textContent = 'Clear Custom Anchors'; btn.style.borderColor = ''; btn.style.color = ''; }
   const r = await api('/api/bonsai/calibration_reset', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({})
   });
-  document.getElementById('bonsaiCalMsg').textContent = r.message || 'Custom calibration anchors cleared.';
-  setTimeout(() => document.getElementById('bonsaiCalMsg').textContent = '', 2400);
+  if (typeof Toast !== 'undefined') Toast.success(r.message || 'Custom calibration anchors cleared.');
   await bonsaiRefreshLinkedDashboards();
 }
 
@@ -1598,8 +1761,7 @@ async function bonsaiSaveSettings() {
     body: JSON.stringify(cfg)
   });
   bonsaiConfigInputIds.forEach((id) => bonsaiDirtyConfigInputs.delete(id));
-  document.getElementById('bonsaiSaveMsg').textContent = 'Saved';
-  setTimeout(() => document.getElementById('bonsaiSaveMsg').textContent = '', 1500);
+  if (typeof Toast !== 'undefined') Toast.success('Bonsai settings saved.');
   await bonsaiRefreshLinkedDashboards();
 }
 
@@ -1621,8 +1783,7 @@ async function bonsaiSaveOfficeHours() {
       office_hours_end_hour: endHour24,
     })
   });
-  document.getElementById('bonsaiOfficeHoursMsg').textContent = 'Quiet Hours saved';
-  setTimeout(() => document.getElementById('bonsaiOfficeHoursMsg').textContent = '', 1800);
+  if (typeof Toast !== 'undefined') Toast.success('Quiet Hours saved.');
   await bonsaiRefreshLinkedDashboards();
 }
 
@@ -1633,8 +1794,7 @@ async function bonsaiToggleOled() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({enabled})
   });
-  document.getElementById('bonsaiOledMsg').textContent = r.message || 'Saved';
-  setTimeout(() => document.getElementById('bonsaiOledMsg').textContent = '', 2000);
+  if (typeof Toast !== 'undefined') Toast.success(r.message || (enabled ? 'OLED enabled' : 'OLED disabled'));
   await bonsaiRefreshLinkedDashboards();
 }
 """

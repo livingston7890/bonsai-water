@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.rivet.telegram-bonsai-bot</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/rivet/Documents/Rivet Project/Codex/Project Bonsai/bonsai-water/scripts/bonsai_telegram_bot.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/rivet/Documents/Rivet Project/Codex/Project Bonsai/bonsai-water</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/rivet/Documents/Rivet Project/Codex/Project Bonsai/bonsai-water/logs/telegram-bonsai-bot.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/rivet/Documents/Rivet Project/Codex/Project Bonsai/bonsai-water/logs/telegram-bonsai-bot.err.log</string>
+</dict>
+</plist>

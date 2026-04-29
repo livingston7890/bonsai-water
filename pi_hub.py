@@ -209,41 +209,9 @@ def master_dashboard_html() -> str:
     <div id="masterActionMsg" class="small muted master-action-msg">Quick controls are live on this page.</div>
   </div>
 
-  <div class="master-kpi-grid">
-    <div class="card master-kpi-card">
-      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">water_drop</span>Soil Moisture</div>
-      <div id="masterMoistureKpi" class="master-kpi-value">--</div>
-      <div id="masterMoistureState" class="master-kpi-sub muted">No data yet</div>
-    </div>
-    <div class="card master-kpi-card">
-      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">bolt</span>Pump</div>
-      <div id="masterPumpKpi" class="master-kpi-value">--</div>
-      <div id="masterPumpMeta" class="master-kpi-sub muted">No data yet</div>
-    </div>
-    <div class="card master-kpi-card">
-      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">water_drop</span>Auto Watering</div>
-      <div id="masterAutoWaterKpi" class="master-kpi-value">--</div>
-      <div id="masterLastWatered" class="master-kpi-sub muted">Last: --</div>
-    </div>
-    <div class="card master-kpi-card">
-      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">shield</span>DNS Blocking</div>
-      <div id="masterDnsKpi" class="master-kpi-value">--</div>
-      <div id="masterDnsMeta" class="master-kpi-sub muted">No data yet</div>
-    </div>
-    <div class="card master-kpi-card">
-      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">query_stats</span>Queries Today</div>
-      <div id="masterQueriesKpi" class="master-kpi-value">--</div>
-      <div class="master-kpi-sub muted">Pi-hole</div>
-    </div>
-    <div class="card master-kpi-card">
-      <div class="master-kpi-label"><span class="material-symbols-rounded label-icon">percent</span>Blocked %</div>
-      <div id="masterBlockedPctKpi" class="master-kpi-value">--</div>
-      <div id="masterBlockedCountMeta" class="master-kpi-sub muted">Blocked: --</div>
-    </div>
-  </div>
-
-  <div class="master-detail-grid">
-    <div class="card master-detail-card">
+  <div class="master-grid">
+    <!-- Col 1: Home Assistant -->
+    <div class="card master-col">
       <div class="panel-title"><span class="material-symbols-rounded label-icon">home</span>Home Assistant</div>
       <div class="master-list">
         <div class="master-item">
@@ -251,19 +219,19 @@ def master_dashboard_html() -> str:
           <span id="masterHaConnection" class="status-pill status-warn">Pending</span>
         </div>
         <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">speaker</span>Speaker left</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">speaker</span>Speaker L</span>
           <span id="masterHaSpeakerLeft" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">speaker</span>Speaker right</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">speaker</span>Speaker R</span>
           <span id="masterHaSpeakerRight" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">lightbulb</span>Lamp left</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">lightbulb</span>Lamp L</span>
           <button id="masterHaLampLeft" type="button" class="master-state master-state-btn neutral" onclick="masterToggleHaLamp('left')">--</button>
         </div>
         <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">lightbulb</span>Lamp right</span>
+          <span class="master-item-name"><span class="material-symbols-rounded">lightbulb</span>Lamp R</span>
           <button id="masterHaLampRight" type="button" class="master-state master-state-btn neutral" onclick="masterToggleHaLamp('right')">--</button>
         </div>
         <div class="master-item">
@@ -274,30 +242,46 @@ def master_dashboard_html() -> str:
       <div class="master-controls">
         <div class="master-control-group">
           <span class="master-control-label"><span class="material-symbols-rounded label-icon">tune</span>Dimmer</span>
-          <input id="masterLampDimmer" type="range" min="1" max="100" step="1" value="80" oninput="masterLampDimmerInputChanged()">
+          <input id="masterLampDimmer" type="range" min="1" max="100" step="1" value="80" class="dimmer-slider" oninput="masterLampDimmerInputChanged()">
           <span id="masterLampDimmerValue" class="status-pill status-warn">80%</span>
         </div>
       </div>
     </div>
 
-    <div class="card master-detail-card">
+    <!-- Col 2: Bonsai (hero) -->
+    <div class="card master-col master-col-hero">
       <div class="panel-title"><span class="material-symbols-rounded label-icon">eco</span>Bonsai</div>
-      <div class="master-list">
-        <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">water_drop</span>Soil moisture</span>
-          <span id="masterBonsaiMoisture" class="master-state neutral">--</span>
+      <!-- Hero: ring + key stats -->
+      <div class="master-hero-block">
+        <div id="masterMoistureRing"></div>
+        <div class="master-hero-stats">
+          <div class="master-kpi-cell">
+            <div class="kpi-cell-label"><span class="material-symbols-rounded label-icon">water_drop</span>State</div>
+            <div id="masterMoistureState" class="kpi-cell-value" style="font-size:14px;">--</div>
+            <div id="masterDryEstimate" class="kpi-cell-sub muted"></div>
+          </div>
+          <div class="master-kpi-cell">
+            <div class="kpi-cell-label"><span class="material-symbols-rounded label-icon">bolt</span>Pump</div>
+            <div id="masterPumpKpi" class="kpi-cell-value master-kpi-value">--</div>
+            <div id="masterPumpMeta" class="kpi-cell-sub muted">Idle</div>
+          </div>
+          <div class="master-kpi-cell">
+            <div class="kpi-cell-label"><span class="material-symbols-rounded label-icon">water_drop</span>Auto</div>
+            <div id="masterAutoWaterKpi" class="kpi-cell-value master-kpi-value">--</div>
+            <div id="masterLastWatered" class="kpi-cell-sub muted">Last: --</div>
+          </div>
+          <div class="master-kpi-cell">
+            <div class="kpi-cell-label"><span class="material-symbols-rounded label-icon">schedule</span>Watered</div>
+            <div id="masterLastWaterSummary" class="kpi-cell-sub muted" style="font-size:11px;">--</div>
+          </div>
         </div>
-        <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">water_drop</span>Moisture state</span>
-          <span id="masterBonsaiState" class="master-state neutral">--</span>
-        </div>
+      </div>
+      <div id="masterMoistureChart"></div>
+      <!-- Bonsai list (deduped — no moisture/state rows) -->
+      <div class="master-list" style="margin-top:10px;">
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">bolt</span>Pump mode</span>
           <span id="masterBonsaiPumpMode" class="master-state neutral">--</span>
-        </div>
-        <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">hourglass_top</span>Pump remaining</span>
-          <span id="masterBonsaiPumpRemaining" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">water_drop</span>Auto watering</span>
@@ -332,8 +316,27 @@ def master_dashboard_html() -> str:
       </div>
     </div>
 
-    <div class="card master-detail-card">
+    <!-- Col 3: Pi-hole -->
+    <div class="card master-col">
       <div class="panel-title"><span class="material-symbols-rounded label-icon">dns</span>Pi-hole</div>
+      <!-- KPI strip — absorbs the old standalone KPI bubbles -->
+      <div class="master-kpi-strip">
+        <div class="master-kpi-cell">
+          <div class="kpi-cell-label"><span class="material-symbols-rounded label-icon">shield</span>Blocking</div>
+          <div id="masterDnsKpi" class="kpi-cell-value master-kpi-value">--</div>
+          <div id="masterDnsMeta" class="kpi-cell-sub muted">--</div>
+        </div>
+        <div class="master-kpi-cell">
+          <div class="kpi-cell-label"><span class="material-symbols-rounded label-icon">query_stats</span>Queries</div>
+          <div id="masterQueriesKpi" class="kpi-cell-value master-kpi-value">--</div>
+          <div class="kpi-cell-sub muted">Today</div>
+        </div>
+        <div class="master-kpi-cell">
+          <div class="kpi-cell-label"><span class="material-symbols-rounded label-icon">percent</span>Blocked</div>
+          <div id="masterBlockedPctKpi" class="kpi-cell-value master-kpi-value">--</div>
+          <div id="masterBlockedCountMeta" class="kpi-cell-sub muted">--</div>
+        </div>
+      </div>
       <div class="master-list">
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">link</span>Connection</span>
@@ -342,22 +345,6 @@ def master_dashboard_html() -> str:
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">settings</span>Mode</span>
           <span id="masterPiholeMode" class="master-state neutral">--</span>
-        </div>
-        <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">shield</span>Blocking</span>
-          <span id="masterPiholeBlocking" class="master-state neutral">--</span>
-        </div>
-        <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">query_stats</span>Queries today</span>
-          <span id="masterPiholeQueries" class="master-state neutral">--</span>
-        </div>
-        <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">block</span>Blocked today</span>
-          <span id="masterPiholeBlocked" class="master-state neutral">--</span>
-        </div>
-        <div class="master-item">
-          <span class="master-item-name"><span class="material-symbols-rounded">percent</span>Blocked percent</span>
-          <span id="masterPiholePercent" class="master-state neutral">--</span>
         </div>
         <div class="master-item">
           <span class="master-item-name"><span class="material-symbols-rounded">lock</span>TLS verify</span>
@@ -375,6 +362,16 @@ def master_dashboard_html() -> str:
         </div>
       </div>
     </div>
+  </div>
+  <!-- Hidden elements for JS compatibility (removed from visible layout but keep IDs) -->
+  <div style="display:none;">
+    <span id="masterBonsaiMoisture"></span>
+    <span id="masterBonsaiState"></span>
+    <span id="masterBonsaiPumpRemaining"></span>
+    <span id="masterPiholeBlocking"></span>
+    <span id="masterPiholeQueries"></span>
+    <span id="masterPiholeBlocked"></span>
+    <span id="masterPiholePercent"></span>
   </div>
 """
 
@@ -503,6 +500,7 @@ function masterSetPaletteState(activePalette) {
     if (!btn) continue;
     btn.classList.toggle('is-active', active === palette);
   }
+  if (typeof setAmbientGlow === 'function') setAmbientGlow(active);
 }
 
 function masterSetShopButtonState(isOpen, enabled=true) {
@@ -587,6 +585,13 @@ function masterSetText(id, text) {
   }
 }
 
+function masterSetKpi(id, text, colorClass) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = String(text ?? '--');
+  el.className = 'master-kpi-value' + (colorClass ? ' ' + colorClass : '');
+}
+
 function masterFormatHourLabel(hour24) {
   const normalized = ((Number(hour24) % 24) + 24) % 24;
   const suffix = normalized >= 12 ? 'PM' : 'AM';
@@ -612,15 +617,20 @@ let masterDimmerDebounceTimer = null;
 let masterDimmerLastSent = null;
 
 function masterNotify(message, isError=false) {
+  const full = String(message || '');
+  if (typeof Toast !== 'undefined') {
+    if (isError) Toast.error(full);
+    else Toast.success(full);
+  }
   const el = document.getElementById('masterActionMsg');
   if (!el) return;
-  const full = String(message || '');
   el.textContent = masterBriefMessage(full, 120) || full;
   el.title = full;
   el.classList.toggle('error', !!isError);
   if (masterActionTimer) clearTimeout(masterActionTimer);
   masterActionTimer = setTimeout(() => {
     el.classList.remove('error');
+    el.textContent = '';
   }, 3200);
 }
 
@@ -641,13 +651,17 @@ async function masterPost(path, payload) {
   });
 }
 
-async function masterRunAction(label, actionFn) {
+async function masterRunAction(label, actionFn, buttonId) {
+  const btn = buttonId ? document.getElementById(buttonId) : null;
+  if (btn) btn.classList.add('loading');
   try {
     const response = await actionFn();
     const msg = response && (response.message || response.msg || response.error);
-    masterNotify(msg || (label + ' updated.'));
+    masterNotify(msg || label);
   } catch (err) {
     masterNotify(label + ' failed: ' + masterFormatError(err), true);
+  } finally {
+    if (btn) btn.classList.remove('loading');
   }
   masterCachedPihole = null;
   await masterRefresh();
@@ -725,45 +739,11 @@ async function masterApplyHaLampBrightness(fromSlider=false) {
   await masterRefresh();
 }
 
-async function masterSetBonsaiAuto(enabled) {
-  await masterRunAction(
-    enabled ? 'Auto watering ON' : 'Auto watering OFF',
-    () => masterPost('/api/bonsai/auto_mode', {enabled: !!enabled})
-  );
-}
-
-async function masterSetBonsaiManual(enabled) {
-  await masterRunAction(
-    enabled ? 'Manual pump START' : 'Manual pump STOP',
-    () => masterPost('/api/bonsai/manual_toggle', {enabled: !!enabled})
-  );
-}
-
-async function masterSetBonsaiReadNow() {
-  await masterRunAction(
-    'Moisture read',
-    () => masterPost('/api/bonsai/read_now', {})
-  );
-}
-
-async function masterSetBonsaiOled(enabled) {
-  await masterRunAction(
-    enabled ? 'OLED ON' : 'OLED OFF',
-    () => masterPost('/api/bonsai/oled', {enabled: !!enabled})
-  );
-}
-
-async function masterSetBonsaiOfficeHours(enabled) {
-  await masterRunAction(
-    enabled ? 'Quiet Hours Enabled' : 'Quiet Hours Disabled',
-    () => masterPost('/api/bonsai/office_hours', {enabled: !!enabled})
-  );
-}
-
 async function masterSetPiholeBlocking(enabled) {
   await masterRunAction(
     enabled ? 'DNS blocking ON' : 'DNS blocking OFF',
-    () => masterPost('/api/pihole/blocking', {enabled: !!enabled})
+    () => masterPost('/api/pihole/blocking', {enabled: !!enabled}),
+    'masterPiholeBlockingToggleBtn'
   );
 }
 
@@ -797,35 +777,109 @@ async function masterToggleHaLamp(side) {
 
 async function masterToggleBonsaiAuto() {
   const target = masterUiState.bonsaiAuto === true ? false : true;
-  await masterSetBonsaiAuto(target);
+  await masterRunAction(
+    target ? 'Auto watering ON' : 'Auto watering OFF',
+    () => masterPost('/api/bonsai/auto_mode', {enabled: !!target}),
+    'masterBonsaiAuto'
+  );
 }
 
 async function masterToggleBonsaiManual() {
   const target = masterUiState.bonsaiManual === true ? false : true;
-  await masterSetBonsaiManual(target);
+  await masterRunAction(
+    target ? 'Manual pump START' : 'Manual pump STOP',
+    () => masterPost('/api/bonsai/manual_toggle', {enabled: !!target}),
+    'masterBonsaiManualToggleBtn'
+  );
 }
 
 async function masterReadBonsaiNow() {
-  await masterSetBonsaiReadNow();
+  await masterRunAction(
+    'Moisture read requested',
+    () => masterPost('/api/bonsai/read_now', {}),
+    'masterBonsaiReadNowBtn'
+  );
 }
 
 async function masterToggleBonsaiOled() {
   const target = masterUiState.bonsaiOled === true ? false : true;
-  await masterSetBonsaiOled(target);
+  await masterRunAction(
+    target ? 'OLED ON' : 'OLED OFF',
+    () => masterPost('/api/bonsai/oled', {enabled: !!target}),
+    'masterBonsaiOled'
+  );
 }
 
 async function masterToggleBonsaiOfficeHours() {
   const target = masterUiState.bonsaiOfficeHours === true ? false : true;
-  await masterSetBonsaiOfficeHours(target);
+  await masterRunAction(
+    target ? 'Quiet Hours enabled' : 'Quiet Hours disabled',
+    () => masterPost('/api/bonsai/office_hours', {enabled: !!target}),
+    'masterBonsaiOfficeHoursBtn'
+  );
 }
 
 async function masterTogglePiholeBlocking() {
   const target = masterUiState.piholeBlocking === true ? false : true;
-  await masterSetPiholeBlocking(target);
+  await masterRunAction(
+    target ? 'DNS blocking ON' : 'DNS blocking OFF',
+    () => masterPost('/api/pihole/blocking', {enabled: !!target}),
+    'masterPiholeBlockingToggleBtn'
+  );
 }
 
 let masterCachedPihole = null;
 let masterLastPiholePollMs = 0;
+let masterReadingsCache = null;
+let masterReadingsLastFetchMs = 0;
+let masterWateringsCache = null;
+let masterWateringsLastFetchMs = 0;
+
+
+// Uses shared calcDryEstimate from delight.js
+function masterCalcDryEstimate(readings, thresholdLow) {
+  if (typeof calcDryEstimate === 'function') return calcDryEstimate(readings, thresholdLow);
+  return null;
+}
+
+function masterRenderWateringSummary(containerId, waterings) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!waterings || waterings.length === 0) { el.textContent = ''; return; }
+  const cutoff = Date.now() - 24 * 3600 * 1000;
+  const recent = waterings.filter(w => new Date(w.timestamp).getTime() > cutoff);
+  if (recent.length === 0) { el.textContent = ''; return; }
+  const totalDuration = recent.reduce((s, w) => s + Number(w.duration || 0), 0);
+  const firstBefore = recent[recent.length - 1].before;
+  const lastAfter = recent[0].after;
+  const ts = new Date(recent[recent.length - 1].timestamp);
+  const timeStr = ts.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  let text = 'Watered ' + timeStr + ' — ' + recent.length + ' pulse' + (recent.length > 1 ? 's' : '') + ', ' + Math.round(totalDuration) + 's';
+  if (firstBefore != null && lastAfter != null) {
+    text += ', ' + Math.round(firstBefore) + '% → ' + Math.round(lastAfter) + '%';
+  }
+  el.textContent = text;
+}
+
+async function masterFetchReadings() {
+  const nowMs = Date.now();
+  if (masterReadingsCache && (nowMs - masterReadingsLastFetchMs) < 60000) return masterReadingsCache;
+  try {
+    const resp = await fetch('/api/bonsai/readings?hours=24');
+    if (resp.ok) { masterReadingsCache = await resp.json(); masterReadingsLastFetchMs = nowMs; }
+  } catch (e) {}
+  return masterReadingsCache;
+}
+
+async function masterFetchWaterings() {
+  const nowMs = Date.now();
+  if (masterWateringsCache && (nowMs - masterWateringsLastFetchMs) < 30000) return masterWateringsCache;
+  try {
+    const resp = await fetch('/api/bonsai/waterings');
+    if (resp.ok) { masterWateringsCache = await resp.json(); masterWateringsLastFetchMs = nowMs; }
+  } catch (e) {}
+  return masterWateringsCache;
+}
 
 async function masterRefresh() {
   const [ha, bonsai] = await Promise.all([
@@ -909,7 +963,6 @@ async function masterRefresh() {
 
     const moistureText = bonsai.moisture === null || bonsai.moisture === undefined ? '--' : (bonsai.moisture + '%');
     const bonsaiState = masterBonsaiText(bonsai);
-    masterSetText('masterMoistureKpi', moistureText);
     masterSetText('masterMoistureState', bonsaiState);
     masterSetText('masterBonsaiMoisture', moistureText);
     masterSetText('masterBonsaiState', bonsaiState.toUpperCase());
@@ -923,7 +976,7 @@ async function masterRefresh() {
     const remaining = pumpRunning
       ? String(autoSessionRunning ? sessionRemaining : phaseRemaining) + 's'
       : '--';
-    masterSetText('masterPumpKpi', pumpMode);
+    masterSetKpi('masterPumpKpi', pumpMode, pumpRunning ? 'kpi-warn' : 'kpi-off');
     masterSetText(
       'masterPumpMeta',
       pumpRunning
@@ -939,7 +992,7 @@ async function masterRefresh() {
     const officeHoursEnabled = !!(bonsai.config && bonsai.config.office_hours_enabled);
     const officeHoursStart = bonsai.config ? bonsai.config.office_hours_start_hour : 17;
     const officeHoursEnd = bonsai.config ? bonsai.config.office_hours_end_hour : 2;
-    masterSetText('masterAutoWaterKpi', autoOn ? 'ON' : 'OFF');
+    masterSetKpi('masterAutoWaterKpi', autoOn ? 'ON' : 'OFF', autoOn ? 'kpi-on' : 'kpi-off');
     masterSetText('masterLastWatered', 'Last: ' + String(bonsai.last_watered || '--'));
     masterSetStatePillButton('masterBonsaiAuto', autoOn ? 'on' : 'off');
     masterSetStatePillButton('masterBonsaiOled', bonsai.oled_enabled ? 'on' : 'off');
@@ -960,6 +1013,19 @@ async function masterRefresh() {
     if (readNowBtn) readNowBtn.disabled = false;
     const officeHoursBtn = document.getElementById('masterBonsaiOfficeHoursBtn');
     if (officeHoursBtn) officeHoursBtn.disabled = false;
+
+    // Visualizations
+    renderMoistureRing('masterMoistureRing', bonsai.moisture, low, high);
+    const readings = await masterFetchReadings();
+    renderMoistureChart('masterMoistureChart', readings, low, high);
+    const estimate = masterCalcDryEstimate(readings, low);
+    const estEl = document.getElementById('masterDryEstimate');
+    if (estEl) estEl.textContent = estimate || '';
+    const waterings = await masterFetchWaterings();
+    masterRenderWateringSummary('masterLastWaterSummary', waterings);
+    // Pump card animation
+    const pumpCard = document.querySelectorAll('.master-kpi-card')[1];
+    if (pumpCard) pumpCard.classList.toggle('pump-active', pumpRunning);
   } else {
     masterSetConnPill('masterConnBonsai', false, 'Unavailable');
     masterUiState.bonsaiAuto = null;
@@ -984,16 +1050,21 @@ async function masterRefresh() {
     const piholeMode = String(pihole.mode_active || pihole.mode || 'auto').toUpperCase();
 
     const blocking = pihole.blocking === true ? 'ON' : pihole.blocking === false ? 'OFF' : 'N/A';
-    masterSetText('masterDnsKpi', blocking);
+    const blockingColor = pihole.blocking === true ? 'kpi-on' : pihole.blocking === false ? 'kpi-bad' : 'kpi-neutral';
+    masterSetKpi('masterDnsKpi', blocking, blockingColor);
     masterSetText('masterDnsMeta', 'Mode: ' + piholeMode);
-    masterSetText('masterQueriesKpi', masterNum(pihole.queries_today, 0));
-    masterSetText('masterBlockedPctKpi', pihole.blocked_percent === null || pihole.blocked_percent === undefined ? '--' : (Number(pihole.blocked_percent).toFixed(1) + '%'));
-    masterSetText('masterBlockedCountMeta', 'Blocked: ' + masterNum(pihole.blocked_today, 0));
+    const queriesVal = pihole.queries_today === null || pihole.queries_today === undefined ? '--' : masterNum(pihole.queries_today, 0);
+    const blockedPctVal = pihole.blocked_percent === null || pihole.blocked_percent === undefined ? '--' : (Number(pihole.blocked_percent).toFixed(1) + '%');
+    const blockedCountVal = pihole.blocked_today === null || pihole.blocked_today === undefined ? '--' : masterNum(pihole.blocked_today, 0);
+    const hasQData = pihole.queries_today !== null && pihole.queries_today !== undefined;
+    masterSetKpi('masterQueriesKpi', queriesVal, hasQData ? 'kpi-primary' : 'kpi-neutral');
+    masterSetKpi('masterBlockedPctKpi', blockedPctVal, hasQData ? 'kpi-warn' : 'kpi-neutral');
+    masterSetText('masterBlockedCountMeta', 'Blocked: ' + blockedCountVal);
 
     masterSetText('masterPiholeMode', piholeMode);
     masterSetText('masterPiholeBlocking', blocking);
-    masterSetText('masterPiholeQueries', masterNum(pihole.queries_today, 0));
-    masterSetText('masterPiholeBlocked', masterNum(pihole.blocked_today, 0));
+    masterSetText('masterPiholeQueries', pihole.queries_today === null || pihole.queries_today === undefined ? 'No data' : masterNum(pihole.queries_today, 0));
+    masterSetText('masterPiholeBlocked', pihole.blocked_today === null || pihole.blocked_today === undefined ? 'No data' : masterNum(pihole.blocked_today, 0));
     masterSetText(
       'masterPiholePercent',
       pihole.blocked_percent === null || pihole.blocked_percent === undefined
@@ -1094,6 +1165,10 @@ def settings_dashboard_html() -> str:
 def settings_dashboard_js() -> str:
     return """
 function settingsSetMessage(text, isError=false) {
+  if (typeof Toast !== 'undefined') {
+    if (isError) Toast.error(text);
+    else if (text) Toast.info(text);
+  }
   const settingsMsg = document.getElementById('settingsActionMsg');
   const masterMsg = document.getElementById('masterActionMsg');
   [settingsMsg, masterMsg].forEach((el) => {
@@ -1166,16 +1241,10 @@ async function settingsSaveUpdaterConfig() {
   const msg = document.getElementById('settingsSaveMsg');
   try {
     const r = await saveHubUpdateConfig(payload);
-    if (msg) {
-      msg.textContent = r.ok ? 'Updater settings saved.' : 'Save failed.';
-      setTimeout(() => { msg.textContent = ''; }, 2200);
-    }
+    if (typeof Toast !== 'undefined') { r.ok ? Toast.success('Updater settings saved.') : Toast.error('Save failed.'); }
     await settingsRefreshUpdaterConfig();
   } catch (err) {
-    if (msg) {
-      msg.textContent = 'Save failed.';
-      setTimeout(() => { msg.textContent = ''; }, 2200);
-    }
+    if (typeof Toast !== 'undefined') Toast.error('Save failed.');
   }
 }
 """
@@ -1927,11 +1996,21 @@ def create_app(plugins: list[Any]) -> Flask:
     }
     .btn:hover { transform: translateY(-1px); filter: brightness(1.04); }
     .btn:active { transform: translateY(0); }
+    .btn:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
     .btn:disabled {
       opacity: 0.62;
       cursor: not-allowed;
       transform: none;
       filter: none;
+    }
+    @keyframes btnPulse { 0%,100% { opacity: 0.55; } 50% { opacity: 0.35; } }
+    .btn.loading {
+      opacity: 0.55;
+      pointer-events: none;
+      animation: btnPulse 1s ease-in-out infinite;
     }
     .btn.gray {
       background: linear-gradient(145deg, rgba(111, 127, 162, 0.36), rgba(95, 109, 141, 0.28));
@@ -2041,51 +2120,119 @@ def create_app(plugins: list[Any]) -> Flask:
     .master-overview-card {
       margin-bottom: 12px;
     }
-    .master-kpi-grid {
+    /* ── Unified 3-column master grid ── */
+    .master-grid {
       display: grid;
-      grid-template-columns: repeat(8, minmax(0, 1fr));
+      grid-template-columns: 1fr 1.4fr 1fr;
       gap: 12px;
-      margin-bottom: 12px;
+      align-items: start;
     }
-    .master-kpi-card {
-      margin: 0;
-      min-height: 124px;
-      padding: 14px 15px;
+    .master-col { margin: 0; }
+
+    /* ── Hero block (ring + stats) ── */
+    .master-hero-block {
       display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 8px;
     }
-    .master-kpi-label {
-      font-size: 12px;
+    .master-hero-stats {
+      flex: 1;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    /* ── Compact KPI strip (Pi-hole top row) ── */
+    .master-kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    /* ── Individual KPI cell ── */
+    .master-kpi-cell {
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: linear-gradient(150deg, rgba(120,140,190,0.1), rgba(100,120,165,0.05));
+      border: 1px solid var(--line-soft);
+    }
+    html[data-theme='light'] .master-kpi-cell {
+      background: linear-gradient(150deg, rgba(232,240,255,0.7), rgba(225,235,250,0.5));
+    }
+    .kpi-cell-label {
+      font-size: 10px;
       color: var(--sub);
-      letter-spacing: 0.07em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
       font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 3px;
     }
-    .master-kpi-value {
+    .kpi-cell-value {
       font-family: 'Space Grotesk', 'Nunito Sans', sans-serif;
-      font-size: 28px;
-      line-height: 1.12;
+      font-size: 18px;
+      line-height: 1.1;
       font-weight: 700;
-      letter-spacing: 0.01em;
+      font-variant-numeric: tabular-nums;
     }
-    .master-kpi-sub {
-      font-size: 13px;
-      line-height: 1.25;
+    .kpi-cell-sub {
+      font-size: 11px;
+      line-height: 1.2;
+      margin-top: 2px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .master-detail-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-      align-items: start;
+
+    /* ── KPI value color states ── */
+    .master-kpi-value {
+      transition: color 400ms ease;
     }
-    .master-detail-card {
-      margin: 0;
-      min-height: 100%;
+    .master-kpi-value.kpi-on { color: var(--ok); }
+    .master-kpi-value.kpi-off { color: var(--sub); }
+    .master-kpi-value.kpi-warn { color: var(--warn); }
+    .master-kpi-value.kpi-bad { color: var(--bad); }
+    .master-kpi-value.kpi-primary { color: var(--primary); }
+    .master-kpi-value.kpi-neutral { color: var(--sub); opacity: 0.6; }
+    .moisture-gauge-wrap {
+      height: 12px;
+      background: linear-gradient(90deg, var(--bad) 0%, var(--warn) 50%, var(--ok) 100%);
+      border-radius: 6px;
+      position: relative;
+      overflow: visible;
     }
+    .moisture-gauge-marker {
+      position: absolute;
+      top: -3px;
+      width: 4px;
+      height: 18px;
+      background: var(--txt);
+      border-radius: 2px;
+      transform: translateX(-2px);
+      box-shadow: 0 0 4px rgba(0,0,0,0.5);
+    }
+    .moisture-gauge-thresh {
+      position: absolute;
+      top: 0;
+      width: 1px;
+      height: 12px;
+      background: rgba(255,255,255,0.35);
+    }
+    .moisture-sparkline-wrap svg {
+      width: 100%;
+      height: 48px;
+      display: block;
+    }
+    .btn.loading {
+      opacity: 0.55;
+      pointer-events: none;
+    }
+    /* .master-detail-grid replaced by .master-grid above */
     .master-list {
       display: grid;
       gap: 8px;
@@ -2220,8 +2367,7 @@ def create_app(plugins: list[Any]) -> Flask:
       }
     }
     @media (max-width: 1360px) {
-      .master-kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-      .master-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .master-grid { grid-template-columns: 1fr 1.4fr 1fr; }
     }
     @media (max-width: 980px) {
       .layout { grid-template-columns: 1fr; }
@@ -2243,8 +2389,8 @@ def create_app(plugins: list[Any]) -> Flask:
       }
       .title { font-size: 34px; }
       .pane-title { font-size: 30px; }
-      .master-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .master-detail-grid { grid-template-columns: 1fr; }
+      .master-grid { grid-template-columns: 1fr; }
+      .master-col-hero { order: -1; }
     }
     @media (max-width: 640px) {
       .wrap { padding: 18px 14px 28px; }
@@ -2272,9 +2418,11 @@ def create_app(plugins: list[Any]) -> Flask:
       }
       .kpi { font-size: 36px; }
       input.wide { width: 100%; }
-      .master-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .master-kpi-card { min-height: 108px; padding: 12px; }
-      .master-kpi-value { font-size: 23px; }
+      .master-grid { grid-template-columns: 1fr; }
+      .master-col-hero { order: -1; }
+      .master-hero-block { flex-direction: column; align-items: stretch; }
+      .master-hero-block .moisture-ring-wrap { margin: 0 auto; }
+      .master-kpi-strip { grid-template-columns: repeat(3, 1fr); }
       .master-item { padding: 8px 9px; }
       .master-state { min-width: 80px; font-size: 10px; }
       .master-control-label { min-width: 100%; }
@@ -2282,8 +2430,10 @@ def create_app(plugins: list[Any]) -> Flask:
       .head-quick-btn { min-height: 40px; }
     }
   </style>
+  <link rel="stylesheet" href="/static/delight.css">
 </head>
 <body>
+<div class=\"toast-container\" id=\"toastContainer\"></div>
 <div class=\"wrap\">
   <header class=\"app-head card\">
     <div class=\"head-brand\">
@@ -2325,6 +2475,7 @@ def create_app(plugins: list[Any]) -> Flask:
   </div>
 </div>
 
+<script src="/static/delight.js"></script>
 <script>
 async function api(path, opts={}) {
   const r = await fetch(path, opts);
@@ -2820,8 +2971,9 @@ def main() -> None:
     app = create_app(plugins)
 
     try:
-        print("[HUB] Web UI at http://0.0.0.0:5000")
-        app.run(host="0.0.0.0", port=5000, debug=False)
+        hub_port = int(os.environ.get("HUB_PORT", 5100))
+        print(f"[HUB] Web UI at http://0.0.0.0:{hub_port}")
+        app.run(host="0.0.0.0", port=hub_port, debug=False)
     except KeyboardInterrupt:
         pass
     finally:

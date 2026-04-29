@@ -577,24 +577,32 @@ class PiholePlugin:
       <span id="piholeSaveMsg" class="small muted"></span>
     </div>
 
-    <div class="row" style="margin-top:12px;">
-      <span class="small muted"><span class="material-symbols-rounded label-icon">shield</span>DNS Blocking:</span>
-      <button id="piholeBlockingBtn" class="btn control-btn" onclick="piholeToggleBlocking()">Loading...</button>
-      <span id="piholeBlockingState" class="small muted">n/a</span>
+    <div class="card" style="margin-top:12px;margin-bottom:0;">
+      <div class="toggle-card-row">
+        <span class="material-symbols-rounded toggle-card-icon">shield</span>
+        <div style="flex:1;">
+          <div class="toggle-card-title">DNS Blocking</div>
+          <div id="piholeBlockingState" class="toggle-card-meta">n/a</div>
+        </div>
+        <div id="piholeBlockingToggle"></div>
+      </div>
     </div>
 
-    <div class="grid" style="margin-top:12px;">
-      <div class="card sub-card" style="margin:0;">
-        <div class="small muted"><span class="material-symbols-rounded label-icon">query_stats</span>Queries Today</div>
-        <div id="piholeQueries" style="font-size:24px;font-weight:800;">--</div>
+    <div class="pihole-stat-grid">
+      <div class="card sub-card pihole-stat-card" style="margin:0;">
+        <div id="piholeQueriesRing"></div>
+        <div id="piholeQueries" class="stat-value" style="margin-top:6px;">--</div>
+        <div class="stat-label">Queries Today</div>
       </div>
-      <div class="card sub-card" style="margin:0;">
-        <div class="small muted"><span class="material-symbols-rounded label-icon">block</span>Blocked Today</div>
-        <div id="piholeBlocked" style="font-size:24px;font-weight:800;">--</div>
+      <div class="card sub-card pihole-stat-card" style="margin:0;">
+        <div id="piholeBlockedRing"></div>
+        <div id="piholeBlocked" class="stat-value" style="margin-top:6px;">--</div>
+        <div class="stat-label">Blocked Today</div>
       </div>
-      <div class="card sub-card" style="margin:0;">
-        <div class="small muted"><span class="material-symbols-rounded label-icon">percent</span>Blocked %</div>
-        <div id="piholePercent" style="font-size:24px;font-weight:800;">--</div>
+      <div class="card sub-card pihole-stat-card" style="margin:0;">
+        <div id="piholePercentRing"></div>
+        <div id="piholePercent" class="stat-value" style="margin-top:6px;">--</div>
+        <div class="stat-label">Blocked %</div>
       </div>
     </div>
   </div>
@@ -637,26 +645,30 @@ async function piholeRefreshStatus() {
       conn.textContent = st.message || 'Pi-hole integration disabled.';
       conn.className = 'status-pill status-warn';
     }
-    document.getElementById('piholeQueries').textContent = piholeFmt(st.queries_today, 0);
-    document.getElementById('piholeBlocked').textContent = piholeFmt(st.blocked_today, 0);
-    document.getElementById('piholePercent').textContent = st.blocked_percent === null || st.blocked_percent === undefined ? '--' : (Number(st.blocked_percent).toFixed(1) + '%');
+    const queriesVal = piholeFmt(st.queries_today, 0);
+    const blockedVal = piholeFmt(st.blocked_today, 0);
+    const pctVal = st.blocked_percent === null || st.blocked_percent === undefined ? '--' : (Number(st.blocked_percent).toFixed(1) + '%');
+    document.getElementById('piholeQueries').textContent = queriesVal;
+    document.getElementById('piholeBlocked').textContent = blockedVal;
+    document.getElementById('piholePercent').textContent = pctVal;
 
-    const btn = document.getElementById('piholeBlockingBtn');
-    if (st.blocking === true) {
-      btn.textContent = 'TURN BLOCKING OFF';
-      btn.classList.add('state-danger');
-      btn.classList.remove('state-action');
-      document.getElementById('piholeBlockingState').textContent = 'Blocking: ON';
-    } else if (st.blocking === false) {
-      btn.textContent = 'TURN BLOCKING ON';
-      btn.classList.add('state-action');
-      btn.classList.remove('state-danger');
-      document.getElementById('piholeBlockingState').textContent = 'Blocking: OFF';
-    } else {
-      btn.textContent = 'UNAVAILABLE';
-      btn.classList.remove('state-action');
-      btn.classList.remove('state-danger');
-      document.getElementById('piholeBlockingState').textContent = 'Blocking: Unknown';
+    // Stat rings
+    if (typeof renderStatRing === 'function') {
+      const qNum = Number(st.queries_today) || 0;
+      const bNum = Number(st.blocked_today) || 0;
+      const pctNum = Number(st.blocked_percent) || 0;
+      renderStatRing('piholeQueriesRing', qNum, Math.max(qNum, 10000), 'primary', 'queries');
+      renderStatRing('piholeBlockedRing', bNum, Math.max(qNum, 1), 'warn', 'blocked');
+      renderStatRing('piholePercentRing', pctNum, 100, pctNum > 30 ? 'ok' : 'warn', '%');
+    }
+
+    // Blocking toggle
+    if (typeof renderToggle === 'function') {
+      const blockingOn = st.blocking === true;
+      const blockingOff = st.blocking === false;
+      const blockingState = blockingOn ? true : blockingOff ? false : null;
+      renderToggle('piholeBlockingToggle', blockingState, 'piholeToggleBlocking()', {size: 'large'});
+      document.getElementById('piholeBlockingState').textContent = blockingOn ? 'Blocking active' : blockingOff ? 'Blocking disabled' : 'Unknown';
     }
   } catch (err) {
     document.getElementById('piholeConn').textContent = 'Pi-hole status error: ' + err.message;
@@ -684,15 +696,13 @@ async function piholeSaveConfig() {
 
   document.getElementById('piholePassword').value = '';
   document.getElementById('piholeToken').value = '';
-  document.getElementById('piholeSaveMsg').textContent = r.ok ? 'Pi-hole settings saved.' : 'Save failed.';
-  setTimeout(() => document.getElementById('piholeSaveMsg').textContent = '', 2000);
+  if (typeof Toast !== 'undefined') { r.ok ? Toast.success('Pi-hole settings saved.') : Toast.error('Save failed.'); }
   await piholeRefreshStatus();
 }
 
 async function piholeToggleBlocking() {
   if (!piholeState || piholeState.blocking === null || piholeState.blocking === undefined) {
-    document.getElementById('piholeSaveMsg').textContent = 'Blocking state unavailable.';
-    setTimeout(() => document.getElementById('piholeSaveMsg').textContent = '', 2000);
+    if (typeof Toast !== 'undefined') Toast.error('Blocking state unavailable.');
     return;
   }
 
@@ -703,8 +713,7 @@ async function piholeToggleBlocking() {
     body: JSON.stringify({enabled: target}),
   });
 
-  document.getElementById('piholeSaveMsg').textContent = r.message || 'Done';
-  setTimeout(() => document.getElementById('piholeSaveMsg').textContent = '', 2200);
+  if (typeof Toast !== 'undefined') Toast.success(r.message || 'Blocking toggled.');
   await piholeRefreshStatus();
 }
 """
