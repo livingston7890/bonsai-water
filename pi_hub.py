@@ -25,8 +25,8 @@ DEFAULT_HUB_UPDATE_CONFIG = {
     "mode": "git",
     "repo_url": "",
     "branch": "main",
-    "auto_deploy": True,
-    "poll_seconds": 60,
+    "auto_deploy": False,
+    "poll_seconds": 300,
 }
 
 DEFAULT_PLUGIN_MODULES = [
@@ -132,6 +132,38 @@ def save_hub_update_config(config: dict[str, Any]) -> None:
 
     with open(HUB_UPDATE_CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cleaned, f, indent=2)
+
+
+def build_hub_restart_shell_command(
+    app_dir: str,
+    python_cmd: str,
+    script_cmd: str,
+    update_cmd: str | None = None,
+    systemd_managed: bool = False,
+) -> str:
+    """Build the shell command used to restart the hub process.
+
+    When running under systemd, do not spawn a second detached Flask process.
+    The current process exits after this command launches and systemd performs
+    the single authoritative restart. Spawning a fallback process under systemd
+    races the service restart and can leave port 5100 flapping.
+    """
+    quoted_app_dir = shlex.quote(app_dir)
+    if systemd_managed:
+        command = update_cmd or "true"
+        return f"cd {quoted_app_dir} && ({command}) >>/tmp/pi_hub_update.log 2>&1"
+
+    if update_cmd:
+        return (
+            f"cd {quoted_app_dir} && "
+            f"({update_cmd}) >>/tmp/pi_hub_update.log 2>&1; "
+            f"(sleep 1; nohup {python_cmd} -u {script_cmd} >/tmp/pi_hub.log 2>&1 < /dev/null &)"
+        )
+
+    return (
+        f"cd {quoted_app_dir} && "
+        f"(sleep 1; nohup {python_cmd} -u {script_cmd} >/tmp/pi_hub.log 2>&1 < /dev/null &)"
+    )
 
 
 def safe_plugin_key(value: str) -> str:
@@ -1319,18 +1351,14 @@ def create_app(plugins: list[Any]) -> Flask:
         script_path = os.path.join(APP_DIR, "pi_hub.py")
         python_cmd = shlex.quote(sys.executable)
         script_cmd = shlex.quote(script_path)
-
-        if update_cmd:
-            shell_cmd = (
-                f"cd {shlex.quote(APP_DIR)} && "
-                f"({update_cmd}) >>/tmp/pi_hub_update.log 2>&1; "
-                f"(sleep 1; nohup {python_cmd} -u {script_cmd} >/tmp/pi_hub.log 2>&1 < /dev/null &)"
-            )
-        else:
-            shell_cmd = (
-                f"cd {shlex.quote(APP_DIR)} && "
-                f"(sleep 1; nohup {python_cmd} -u {script_cmd} >/tmp/pi_hub.log 2>&1 < /dev/null &)"
-            )
+        systemd_managed = bool(os.environ.get("INVOCATION_ID") or os.environ.get("JOURNAL_STREAM"))
+        shell_cmd = build_hub_restart_shell_command(
+            app_dir=APP_DIR,
+            python_cmd=python_cmd,
+            script_cmd=script_cmd,
+            update_cmd=update_cmd,
+            systemd_managed=systemd_managed,
+        )
 
         try:
             subprocess.Popen(
