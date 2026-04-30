@@ -43,9 +43,29 @@ def api(method: str, payload: dict[str, Any] | None = None, timeout: int = 30) -
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
-    req = request.Request(url, data=data, headers=headers, method="POST" if payload is not None else "GET")
-    with request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8", errors="replace"))
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        req = request.Request(url, data=data, headers=headers, method="POST" if payload is not None else "GET")
+        try:
+            with request.urlopen(req, timeout=timeout) as resp:
+                result = json.loads(resp.read().decode("utf-8", errors="replace"))
+            if not result.get("ok", True):
+                raise RuntimeError(f"Telegram API {method} failed: {result}")
+            return result
+        except Exception as exc:
+            last_exc = exc
+            code = int(getattr(exc, "code", 0) or 0)
+            transient = isinstance(exc, (TimeoutError, OSError, urlerror.URLError)) or code in {408, 425, 429, 500, 502, 503, 504}
+            if attempt >= 2 or not transient:
+                if isinstance(exc, urlerror.HTTPError):
+                    try:
+                        detail = exc.read().decode("utf-8", errors="replace")[:500]
+                    except Exception:
+                        detail = ""
+                    raise RuntimeError(f"Telegram API {method} HTTP {code}: {detail}") from exc
+                raise
+            time.sleep(min(8.0, 1.5 * (2**attempt)))
+    raise RuntimeError(f"Telegram API {method} failed: {last_exc}")
 
 
 def send_message(chat_id: int | str, text: str) -> None:
@@ -53,6 +73,14 @@ def send_message(chat_id: int | str, text: str) -> None:
     text = (text or "").strip() or "(empty)"
     for chunk in [text[i : i + 3500] for i in range(0, len(text), 3500)]:
         api("sendMessage", {"chat_id": chat_id, "text": chunk, "disable_web_page_preview": True}, timeout=15)
+
+
+def safe_send_message(chat_id: int | str, text: str) -> None:
+    """Best-effort Telegram reply that must not block update acknowledgement."""
+    try:
+        send_message(chat_id, text)
+    except Exception as exc:
+        print(f"Telegram sendMessage failed after command handling: {exc}", file=sys.stderr)
 
 
 def read_offset() -> int | None:
@@ -94,14 +122,14 @@ def handle_update(update: dict[str, Any]) -> None:
     if chat_id is None:
         return
     if user_id != allowed_user_id():
-        send_message(chat_id, "Not authorized for Project Bonsai ops.")
+        safe_send_message(chat_id, "Not authorized for Project Bonsai ops.")
         return
     write_chat(chat_id)
     try:
         reply = bonsai_ops.apply_command(text or "help")
     except Exception as exc:
         reply = f"Project Bonsai command failed: {exc}"
-    send_message(chat_id, reply)
+    safe_send_message(chat_id, reply)
 
 
 def poll_once() -> int:
