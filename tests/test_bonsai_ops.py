@@ -218,6 +218,7 @@ class BonsaiOpsTests(TestCase):
         self.assertIn("git fetch --deepen=1000 origin main", remote_script)
         self.assertIn("git merge-base --is-ancestor HEAD FETCH_HEAD", remote_script)
         self.assertIn("refusing deploy: local HEAD is not an ancestor", remote_script)
+        self.assertIn('p.write_text(json.dumps(data, indent=2) + "\\n")', remote_script)
         self.assertIn("git merge --ff-only FETCH_HEAD", remote_script)
         self.assertIn('"auto_deploy": False', remote_script)
         self.assertIn("sudo systemctl restart bonsai-hub.service", remote_script)

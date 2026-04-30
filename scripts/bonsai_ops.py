@@ -485,7 +485,7 @@ from pathlib import Path
 p = Path('hub_update.json')
 data = json.loads(p.read_text()) if p.exists() else {{}}
 data.update({{"mode": "git", "branch": "main", "auto_deploy": False, "poll_seconds": max(300, int(data.get("poll_seconds", 300) or 300))}})
-p.write_text(json.dumps(data, indent=2) + "\n")
+p.write_text(json.dumps(data, indent=2) + "\\n")
 PY
 python3 -m py_compile pi_hub.py scripts/bonsai_ops.py scripts/bonsai_hub_watchdog.py
 sudo systemctl restart bonsai-hub.service
