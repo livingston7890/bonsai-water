@@ -458,6 +458,17 @@ stamp=$(date +%Y%m%d-%H%M%S)
 mkdir -p deploy-backups
 before=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 git fetch origin {branch}
+if ! git merge-base --is-ancestor HEAD FETCH_HEAD; then
+  if [ -f .git/shallow ]; then
+    echo "shallow-history detected; deepening before fast-forward deploy"
+    git fetch --deepen=1000 origin {branch}
+  fi
+fi
+if ! git merge-base --is-ancestor HEAD FETCH_HEAD; then
+  echo "refusing deploy: local HEAD is not an ancestor of origin/{branch}" >&2
+  git log --oneline --decorate --graph --all -20 >&2 || true
+  exit 42
+fi
 after=$(git rev-parse --short FETCH_HEAD)
 changed=$(git diff --name-only HEAD FETCH_HEAD 2>/dev/null || true)
 if [ -z "$changed" ]; then
