@@ -58,6 +58,7 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec("pump_off", ("pump off", "stop pump", "manual pump off"), "stop manual/active pump run", mutates=True),
     CommandSpec("pihole", ("pihole", "dns"), "Pi-hole blocking/metrics summary"),
     CommandSpec("restart_app", ("restart app", "restart hub"), "restart only the Bonsai Flask app", mutates=True),
+    CommandSpec("deploy_hub", ("deploy hub confirm", "update hub confirm"), "manually deploy latest GitHub main to the Pi hub; exact confirmation required", mutates=True, destructive=True),
     CommandSpec("reboot_pi", ("reboot pi confirm", "reset pi confirm"), "reboot the Raspberry Pi via SSH; exact confirmation required", mutates=True, destructive=True),
 )
 
@@ -437,12 +438,68 @@ def restart_app() -> str:
     return f"App restart requested: {result.get('message', 'ok')}"
 
 
-def reboot_pi() -> str:
+def _ssh_base_command() -> tuple[str, list[str]]:
     target = config_value("BONSAI_PI_SSH_TARGET", "").strip()
     if not target:
-        raise OpsError("BONSAI_PI_SSH_TARGET is not configured. Set it in .env, e.g. madmaestro@10.0.0.38 or Tailscale host.")
+        raise OpsError("BONSAI_PI_SSH_TARGET is not configured. Set it in .env, e.g. madmaestro@10.0.0.38 or maechinepi4.local.")
     extra = shlex.split(config_value("BONSAI_PI_SSH_EXTRA_ARGS", ""))
-    command = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", *extra, target, "sudo", "/sbin/reboot"]
+    return target, ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", *extra, target]
+
+
+def deploy_hub() -> str:
+    """Manually deploy latest origin/main to the Pi hub via fixed SSH workflow."""
+    target, ssh_cmd = _ssh_base_command()
+    app_dir = shlex.quote(config_value("BONSAI_PI_APP_DIR", "/home/madmaestro/bonsai-water"))
+    branch = shlex.quote(config_value("BONSAI_DEPLOY_BRANCH", "main") or "main")
+    remote = f'''
+set -euo pipefail
+cd {app_dir}
+stamp=$(date +%Y%m%d-%H%M%S)
+mkdir -p deploy-backups
+before=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+git fetch origin {branch}
+after=$(git rev-parse --short FETCH_HEAD)
+changed=$(git diff --name-only HEAD FETCH_HEAD 2>/dev/null || true)
+if [ -z "$changed" ]; then
+  echo "already-current $before"
+  cat hub_update.json 2>/dev/null || true
+  exit 0
+fi
+printf '%s\n' "$changed" > "deploy-backups/manual-deploy-$stamp.files"
+tar -czf "deploy-backups/manual-deploy-$stamp.tgz" -T "deploy-backups/manual-deploy-$stamp.files" 2>/dev/null || true
+git merge --ff-only FETCH_HEAD
+python3 - <<'PY'
+import json
+from pathlib import Path
+p = Path('hub_update.json')
+data = json.loads(p.read_text()) if p.exists() else {{}}
+data.update({{"mode": "git", "branch": "main", "auto_deploy": False, "poll_seconds": max(300, int(data.get("poll_seconds", 300) or 300))}})
+p.write_text(json.dumps(data, indent=2) + "\n")
+PY
+python3 -m py_compile pi_hub.py scripts/bonsai_ops.py scripts/bonsai_hub_watchdog.py
+sudo systemctl restart bonsai-hub.service
+for i in $(seq 1 18); do
+  if curl -fsS --max-time 5 http://127.0.0.1:5100/api/hub/health >/tmp/bonsai-deploy-health.json; then
+    echo "deployed $before -> $after"
+    echo "backup deploy-backups/manual-deploy-$stamp.tgz"
+    cat /tmp/bonsai-deploy-health.json
+    exit 0
+  fi
+  sleep 5
+done
+systemctl --no-pager --full status bonsai-hub.service || true
+exit 1
+'''
+    completed = subprocess.run([*ssh_cmd, remote], capture_output=True, text=True, timeout=150, check=False)
+    detail = "\n".join(part.strip() for part in [completed.stdout, completed.stderr] if part.strip())
+    if completed.returncode != 0:
+        raise OpsError(f"Hub deploy failed on {target}: {detail[:1200]}")
+    return "Manual hub deploy complete.\n" + detail[:1600]
+
+
+def reboot_pi() -> str:
+    target, ssh_cmd = _ssh_base_command()
+    command = [*ssh_cmd, "sudo", "/sbin/reboot"]
     completed = subprocess.run(command, capture_output=True, text=True, timeout=15, check=False)
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "ssh reboot failed").strip()
@@ -492,6 +549,8 @@ def apply_command(text: str) -> str:
         return pihole_report()
     if command == "restart_app":
         return restart_app()
+    if command == "deploy_hub":
+        return deploy_hub()
     if command == "reboot_pi":
         return reboot_pi()
     raise OpsError(f"Unhandled command: {command}")

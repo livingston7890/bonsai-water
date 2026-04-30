@@ -24,6 +24,8 @@ class BonsaiOpsTests(TestCase):
         self.assertEqual(bonsai_ops.classify_command("money"), "palette_money")
         self.assertEqual(bonsai_ops.classify_command("candle lamps"), "palette_candle")
         self.assertEqual(bonsai_ops.classify_command("pump off"), "pump_off")
+        self.assertEqual(bonsai_ops.classify_command("deploy hub confirm"), "deploy_hub")
+        self.assertIsNone(bonsai_ops.classify_command("deploy hub"))
         self.assertIsNone(bonsai_ops.classify_command("reboot pi"))
         self.assertIsNone(bonsai_ops.classify_command("run rm -rf /"))
 
@@ -193,6 +195,30 @@ class BonsaiOpsTests(TestCase):
         with mock.patch.object(bonsai_ops, "config_value", return_value=""):
             with self.assertRaises(bonsai_ops.OpsError):
                 bonsai_ops.reboot_pi()
+
+    def test_deploy_hub_uses_fixed_manual_workflow(self):
+        vals = {
+            "BONSAI_PI_SSH_TARGET": "pi@example",
+            "BONSAI_PI_SSH_EXTRA_ARGS": "",
+            "BONSAI_PI_APP_DIR": "/home/madmaestro/bonsai-water",
+            "BONSAI_DEPLOY_BRANCH": "main",
+        }
+        with mock.patch.object(bonsai_ops, "config_value", side_effect=lambda k, d="": vals.get(k, d)):
+            with mock.patch.object(bonsai_ops.subprocess, "run") as run:
+                run.return_value.returncode = 0
+                run.return_value.stdout = "deployed abc1234 -> def5678\n{}"
+                run.return_value.stderr = ""
+                msg = bonsai_ops.deploy_hub()
+        self.assertIn("Manual hub deploy complete", msg)
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[:5], ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8"])
+        self.assertEqual(argv[5], "pi@example")
+        remote_script = argv[-1]
+        self.assertIn("git fetch origin main", remote_script)
+        self.assertIn("git merge --ff-only FETCH_HEAD", remote_script)
+        self.assertIn('"auto_deploy": False', remote_script)
+        self.assertIn("sudo systemctl restart bonsai-hub.service", remote_script)
+        self.assertNotIn("git reset --hard", remote_script)
 
     def test_reboot_command_is_fixed_allowlist(self):
         vals = {"BONSAI_PI_SSH_TARGET": "pi@example", "BONSAI_PI_SSH_EXTRA_ARGS": ""}
