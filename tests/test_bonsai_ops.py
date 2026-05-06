@@ -23,6 +23,11 @@ class BonsaiOpsTests(TestCase):
         self.assertEqual(bonsai_ops.classify_command("warm lights"), "palette_warm")
         self.assertEqual(bonsai_ops.classify_command("money"), "palette_money")
         self.assertEqual(bonsai_ops.classify_command("candle lamps"), "palette_candle")
+        self.assertEqual(bonsai_ops.classify_command("ice/fire"), "palette_ice_fire")
+        self.assertEqual(bonsai_ops.classify_command("green purple"), "palette_aurora")
+        self.assertEqual(bonsai_ops.classify_command("cyber orchid"), "palette_cyber_orchid")
+        self.assertEqual(bonsai_ops.classify_command("ember forest"), "palette_ember_forest")
+        self.assertEqual(bonsai_ops.classify_command("moon grove"), "palette_moon_grove")
         self.assertEqual(bonsai_ops.classify_command("pump off"), "pump_off")
         self.assertEqual(bonsai_ops.classify_command("deploy hub confirm"), "deploy_hub")
         self.assertIsNone(bonsai_ops.classify_command("deploy hub"))
@@ -89,8 +94,8 @@ class BonsaiOpsTests(TestCase):
             calls.append((path, method, payload))
             if path == "/api/ha/lamps":
                 return {"message": "lamps set", "ha_status": {"lamp_left_state": "off", "lamp_right_state": "off"}}
-            if path == "/api/ha/speaker":
-                return {"message": f"speaker {payload['side']} set", "ha_status": {"speaker_left_state": "off", "speaker_right_state": "off"}}
+            if path == "/api/ha/speakers":
+                return {"message": "speakers set", "ha_status": {"speaker_left_state": "off", "speaker_right_state": "off"}}
             if path == "/api/bonsai/manual_toggle":
                 return {"message": "Manual pump stop requested."}
             if path == "/api/bonsai/status":
@@ -106,8 +111,7 @@ class BonsaiOpsTests(TestCase):
         self.assertIn("Speakers off", speakers_msg)
         self.assertIn("Pump stop requested", pump_msg)
         self.assertIn(("/api/ha/lamps", "POST", {"on": False}), calls)
-        self.assertIn(("/api/ha/speaker", "POST", {"side": "left", "on": False}), calls)
-        self.assertIn(("/api/ha/speaker", "POST", {"side": "right", "on": False}), calls)
+        self.assertIn(("/api/ha/speakers", "POST", {"on": False}), calls)
         self.assertIn(("/api/bonsai/manual_toggle", "POST", {"enabled": False}), calls)
 
     def test_open_and_close_shop_toggle_lights_and_speakers_together(self):
@@ -134,15 +138,13 @@ class BonsaiOpsTests(TestCase):
         self.assertIn("lights and speakers on", open_msg)
         self.assertIn("Shop closed", close_msg)
         self.assertIn("lights and speakers off", close_msg)
-        self.assertEqual(calls[:3], [
+        self.assertEqual(calls[:2], [
             ("/api/ha/lamps", "POST", {"on": True}),
-            ("/api/ha/speaker", "POST", {"side": "left", "on": True}),
-            ("/api/ha/speaker", "POST", {"side": "right", "on": True}),
+            ("/api/ha/speakers", "POST", {"on": True}),
         ])
-        self.assertEqual(calls[3:6], [
+        self.assertEqual(calls[2:4], [
             ("/api/ha/lamps", "POST", {"on": False}),
-            ("/api/ha/speaker", "POST", {"side": "left", "on": False}),
-            ("/api/ha/speaker", "POST", {"side": "right", "on": False}),
+            ("/api/ha/speakers", "POST", {"on": False}),
         ])
 
     def test_open_shop_continues_if_one_device_fails(self):
@@ -158,7 +160,7 @@ class BonsaiOpsTests(TestCase):
             msg = bonsai_ops.apply_command("open shop")
 
         self.assertIn("Failures: lamps", msg)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 2)
 
     def test_palette_commands_call_fixed_lamp_palette_endpoint(self):
         calls = []

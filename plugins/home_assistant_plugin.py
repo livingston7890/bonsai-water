@@ -21,8 +21,22 @@ DEFAULT_CONFIG = {
     "ha_lamp_brightness_last": 80,
 }
 
-LIGHT_COMMAND_RETRIES = 3
-LIGHT_VERIFY_DELAY_SECONDS = 0.45
+# Operator palette catalog. "same" palettes use one grouped HA service call;
+# split palettes intentionally send different colors to left/right lamps.
+LAMP_PALETTES = {
+    "cool": {"label": "Cool", "mode": "same", "rgb": (80, 150, 255)},
+    "warm": {"label": "Warm", "mode": "same", "rgb": (255, 120, 36)},
+    "money": {"label": "Money", "mode": "same", "rgb": (70, 210, 95)},
+    "candle": {"label": "Candle", "mode": "same", "color_temp": 454},
+    "ice_fire": {"label": "Ice/Fire", "mode": "split", "left_rgb": (80, 150, 255), "right_rgb": (255, 32, 18)},
+    "aurora": {"label": "Aurora", "mode": "split", "left_rgb": (55, 220, 110), "right_rgb": (155, 80, 255)},
+    "cyber_orchid": {"label": "Cyber Orchid", "mode": "split", "left_rgb": (0, 220, 255), "right_rgb": (230, 65, 255)},
+    "ember_forest": {"label": "Ember Forest", "mode": "split", "left_rgb": (255, 86, 36), "right_rgb": (35, 190, 95)},
+    "moon_grove": {"label": "Moon Grove", "mode": "split", "left_rgb": (95, 180, 255), "right_rgb": (85, 235, 145)},
+}
+
+LIGHT_COMMAND_RETRIES = 2
+LIGHT_VERIFY_DELAY_SECONDS = 0.35
 
 
 class HomeAssistantPlugin:
@@ -100,7 +114,7 @@ class HomeAssistantPlugin:
             return False, data.get("error", "Request failed")
         return True, str(data.get("state", "unknown"))
 
-    def _call_service(self, domain: str, service: str, entity_id: str, extra: Optional[dict] = None) -> tuple[bool, str]:
+    def _call_service(self, domain: str, service: str, entity_id: object, extra: Optional[dict] = None) -> tuple[bool, str]:
         payload = {"entity_id": entity_id}
         if extra:
             payload.update(extra)
@@ -218,6 +232,83 @@ class HomeAssistantPlugin:
                 time.sleep(pause)
 
         return False, last_error
+
+    def _call_light_service_group_checked(
+        self,
+        service: str,
+        entity_ids: list[str],
+        extra: Optional[dict] = None,
+        expected_state: Optional[str] = None,
+        expected_attrs: Optional[dict] = None,
+        retries: int = LIGHT_COMMAND_RETRIES,
+        settle_delay: float = LIGHT_VERIFY_DELAY_SECONDS,
+    ) -> tuple[bool, str]:
+        """Apply one HA service call to all lamp entities, then verify each entity.
+
+        Govee/HA lamp calls were previously sent one-at-a-time with transitions and
+        strict verification. That made the UI feel slow and could leave the second
+        lamp stale if one side lagged. HA accepts an entity_id list; use that as
+        the primary path so both lamps receive the same command in the same HA
+        transaction, then retry only entities that fail verification.
+        """
+        entities = [str(entity).strip() for entity in entity_ids if str(entity).strip()]
+        if not entities:
+            return False, "Set floor lamp entity IDs first."
+
+        attempts = max(1, int(retries))
+        pause = max(0.1, float(settle_delay))
+        last_failures: list[str] = []
+
+        for attempt in range(attempts):
+            ok, message = self._call_service("light", service, entities, extra=extra)
+            if not ok:
+                last_failures = [f"all lamps: {message}"]
+            else:
+                if not expected_state and not expected_attrs:
+                    return True, "Lamps updated."
+                time.sleep(pause)
+                last_failures = []
+                for entity_id in entities:
+                    verified, verify_message = self._verify_light_result(
+                        entity_id,
+                        expected_state=expected_state,
+                        expected_attrs=expected_attrs,
+                    )
+                    if not verified:
+                        last_failures.append(f"{entity_id}: {verify_message}")
+                if not last_failures:
+                    return True, "Lamps updated."
+
+            if attempt + 1 < attempts:
+                time.sleep(pause)
+
+        # Targeted fallback: if HA accepted the group call but one entity lagged,
+        # retry only the failed entities individually. This keeps partial failure
+        # visible while still giving the right lamp a second chance.
+        retry_entities = []
+        for failure in last_failures:
+            entity = failure.split(":", 1)[0].strip()
+            if entity in entities:
+                retry_entities.append(entity)
+        for entity_id in retry_entities:
+            ok, message = self._call_light_service_checked(
+                service,
+                entity_id,
+                extra=extra,
+                expected_state=expected_state,
+                expected_attrs=expected_attrs,
+                retries=1,
+                settle_delay=pause,
+            )
+            if ok:
+                last_failures = [f for f in last_failures if not f.startswith(f"{entity_id}:")]
+            else:
+                last_failures = [f for f in last_failures if not f.startswith(f"{entity_id}:")]
+                last_failures.append(f"{entity_id}: {message}")
+
+        if last_failures:
+            return False, "; ".join(last_failures)
+        return True, "Lamps updated."
 
     @staticmethod
     def _clamp_brightness(value: object, default: int = 80) -> int:
@@ -355,6 +446,16 @@ class HomeAssistantPlugin:
             return False, f"Set {label} entity first."
         return self._call_service("switch", "turn_on" if on else "turn_off", entity_id)
 
+    def set_speakers(self, on: bool) -> tuple[bool, str]:
+        entities = [
+            str(self.config.get("ha_speaker_left_entity", "")).strip(),
+            str(self.config.get("ha_speaker_right_entity", "")).strip(),
+        ]
+        entities = [entity for entity in entities if entity]
+        if not entities:
+            return False, "Set speaker entity IDs first."
+        return self._call_service("switch", "turn_on" if on else "turn_off", entities)
+
     def set_lamp(self, side: str, on: bool) -> tuple[bool, str]:
         side_norm = str(side).strip().lower()
         if side_norm == "left":
@@ -382,19 +483,13 @@ class HomeAssistantPlugin:
         entities = self._resolve_lamp_entities()
         if not entities:
             return False, "Set floor lamp entity IDs first."
-        failures: list[str] = []
-        for entity_id in entities:
-            ok, message = self._call_light_service_checked(
-                "turn_on" if on else "turn_off",
-                entity_id,
-                expected_state="on" if on else "off",
-                settle_delay=0.35,
-            )
-            if not ok:
-                failures.append(f"{entity_id}: {message}")
-        if failures:
-            return False, "; ".join(failures)
-        return True, "Lamps updated."
+        return self._call_light_service_group_checked(
+            "turn_on" if on else "turn_off",
+            entities,
+            extra={"transition": 0},
+            expected_state="on" if on else "off",
+            settle_delay=0.35,
+        )
 
     def _resolve_lamp_entities(self) -> list[str]:
         left = str(self.config.get("ha_lamp_left_entity", "")).strip()
@@ -419,70 +514,78 @@ class HomeAssistantPlugin:
             seen.add(entity)
         return unique
 
+    @staticmethod
+    def _palette_extra_and_expected(spec: dict, brightness: int) -> tuple[dict, dict]:
+        expected_brightness = HomeAssistantPlugin._brightness_to_ha(brightness)
+        if "rgb" in spec:
+            color = [*spec["rgb"]]
+            return {"rgb_color": color, "brightness_pct": brightness, "transition": 0}, {"rgb_color": color, "brightness": expected_brightness}
+        if "color_temp" in spec:
+            temp = int(spec["color_temp"])
+            return {"color_temp": temp, "brightness_pct": brightness, "transition": 0}, {"color_temp": temp, "brightness": expected_brightness}
+        raise ValueError("palette spec missing color")
+
+    @staticmethod
+    def _palette_split_extra_and_expected(color: tuple[int, int, int], brightness: int) -> tuple[dict, dict]:
+        expected_brightness = HomeAssistantPlugin._brightness_to_ha(brightness)
+        rgb = [*color]
+        return {"rgb_color": rgb, "brightness_pct": brightness, "transition": 0}, {"rgb_color": rgb, "brightness": expected_brightness}
+
     def set_lamp_palette(self, palette: str) -> tuple[bool, str]:
-        palette_name = str(palette).strip().lower()
-        entities = self._resolve_lamp_entities()
-        if not entities:
-            return False, "Set floor lamp entity IDs first."
+        palette_name = str(palette).strip().lower().replace("-", "_").replace(" ", "_")
+        spec = LAMP_PALETTES.get(palette_name)
+        if not spec:
+            allowed = ", ".join(sorted(LAMP_PALETTES))
+            return False, f"Palette must be one of: {allowed}."
 
         brightness = self._clamp_brightness(self.config.get("ha_lamp_brightness_last", 80))
-        expected_brightness = self._brightness_to_ha(brightness)
-        if palette_name == "warm":
-            colors = [(255, 80, 20), (255, 110, 28), (255, 125, 16), (255, 145, 40)]
-            label = "Warm"
-            use_color_temp = False
-        elif palette_name == "cool":
-            colors = [(130, 70, 255), (40, 120, 255), (20, 200, 170), (70, 180, 255)]
-            label = "Cool"
-            use_color_temp = False
-        elif palette_name == "money":
-            colors = [(38, 128, 62), (142, 235, 151), (32, 116, 56), (160, 246, 168)]
-            label = "Money"
-            use_color_temp = False
-        elif palette_name == "candle":
-            colors = []
-            label = "Candle"
-            use_color_temp = True
-        else:
-            return False, "Palette must be 'cool', 'money', 'warm', or 'candle'."
+        label = str(spec["label"])
 
-        failures: list[str] = []
-        for idx, entity_id in enumerate(entities):
-            if use_color_temp:
-                extra = {
-                    "color_temp": 454,
-                    "brightness_pct": brightness,
-                    "transition": 0.6,
-                }
-            else:
-                color = colors[idx % len(colors)]
-                extra = {
-                    "rgb_color": [int(color[0]), int(color[1]), int(color[2])],
-                    "brightness_pct": brightness,
-                    "transition": 0.6,
-                }
-                expected_attrs = {
-                    "rgb_color": [int(color[0]), int(color[1]), int(color[2])],
-                    "brightness": expected_brightness,
-                }
-            if use_color_temp:
-                expected_attrs = {
-                    "color_temp": 454,
-                    "brightness": expected_brightness,
-                }
-            ok, message = self._call_light_service_checked(
+        if spec.get("mode") == "same":
+            entities = self._resolve_lamp_entities()
+            if not entities:
+                return False, "Set floor lamp entity IDs first."
+            extra, expected_attrs = self._palette_extra_and_expected(spec, brightness)
+            ok, message = self._call_light_service_group_checked(
                 "turn_on",
-                entity_id,
+                entities,
                 extra=extra,
                 expected_state="on",
                 expected_attrs=expected_attrs,
-                settle_delay=0.8,
+                settle_delay=0.45,
             )
             if not ok:
-                failures.append(f"{entity_id}: {message}")
+                return False, message
+        else:
+            left = str(self.config.get("ha_lamp_left_entity", "")).strip()
+            right = str(self.config.get("ha_lamp_right_entity", "")).strip()
+            fallback = str(self.config.get("ha_light_entity", "")).strip()
+            assignments: list[tuple[str, tuple[int, int, int]]] = []
+            if left:
+                assignments.append((left, spec["left_rgb"]))
+            if right and right != left:
+                assignments.append((right, spec["right_rgb"]))
+            if not assignments and fallback:
+                assignments.append((fallback, spec["left_rgb"]))
+            if not assignments:
+                return False, "Set floor lamp entity IDs first."
 
-        if failures:
-            return False, "; ".join(failures)
+            failures: list[str] = []
+            for entity_id, color in assignments:
+                extra, expected_attrs = self._palette_split_extra_and_expected(color, brightness)
+                ok, message = self._call_light_service_checked(
+                    "turn_on",
+                    entity_id,
+                    extra=extra,
+                    expected_state="on",
+                    expected_attrs=expected_attrs,
+                    retries=1,
+                    settle_delay=0.35,
+                )
+                if not ok:
+                    failures.append(f"{entity_id}: {message}")
+            if failures:
+                return False, "; ".join(failures)
 
         self.config["ha_lamp_palette_last"] = palette_name
         self._save_config(self.config)
@@ -521,21 +624,16 @@ class HomeAssistantPlugin:
 
         brightness = self._clamp_brightness(brightness_pct)
         expected_brightness = self._brightness_to_ha(brightness)
-        failures: list[str] = []
-        for entity_id in entities:
-            ok, message = self._call_light_service_checked(
-                "turn_on",
-                entity_id,
-                extra={"brightness_pct": brightness, "transition": 0.4},
-                expected_state="on",
-                expected_attrs={"brightness": expected_brightness},
-                settle_delay=0.6,
-            )
-            if not ok:
-                failures.append(f"{entity_id}: {message}")
-
-        if failures:
-            return False, "; ".join(failures)
+        ok, message = self._call_light_service_group_checked(
+            "turn_on",
+            entities,
+            extra={"brightness_pct": brightness, "transition": 0},
+            expected_state="on",
+            expected_attrs={"brightness": expected_brightness},
+            settle_delay=0.35,
+        )
+        if not ok:
+            return False, message
 
         self.config["ha_lamp_brightness_last"] = brightness
         self._save_config(self.config)
@@ -607,6 +705,14 @@ class HomeAssistantPlugin:
             code = 200 if ok else 502
             return jsonify({"ok": ok, "message": message, "ha_status": self.get_status()}), code
 
+        @app.route("/api/ha/speakers", methods=["POST"])
+        def ha_speakers():
+            payload = request.get_json(force=True)
+            on = bool(payload.get("on", False))
+            ok, message = self.set_speakers(on)
+            code = 200 if ok else 502
+            return jsonify({"ok": ok, "message": message, "ha_status": self.get_status()}), code
+
         @app.route("/api/ha/lamp", methods=["POST"])
         def ha_lamp():
             payload = request.get_json(force=True)
@@ -674,73 +780,23 @@ class HomeAssistantPlugin:
   </div>
 
   <div class="card">
-    <div class="panel-title"><span class="material-symbols-rounded label-icon">speaker</span>Speakers</div>
-    <div id="haSpeakerVisual" style="margin:8px 0;"></div>
-    <div class="ha-device-row" id="haSpeakerLeftRow">
-      <span class="material-symbols-rounded ha-device-icon">speaker</span>
-      <span class="ha-device-label">Speaker Left</span>
-      <div id="haSpeakerLeftToggle"></div>
+    <div class="panel-title"><span class="material-symbols-rounded label-icon">palette</span>Lamp Palettes</div>
+    <div class="panel-meta">Color presets only. On/off, speaker, scenes, and dimmer controls stay hidden until the device path is reliable.</div>
+    <div class="head-palette-row" style="margin-top:12px;">
+      <button id="haPaletteIceFire" class="btn control-btn palette-btn preset-cool" style="background:linear-gradient(100deg,#5096ff 0%,#70e7ff 46%,#ff2012 54%,#ff6a2a 100%);color:#fff;text-shadow:0 1px 3px #000;border-color:rgba(255,255,255,.38)" onclick="haSetLampPalette('ice_fire')">ICE/FIRE</button>
+      <button id="haPaletteAurora" class="btn control-btn palette-btn preset-money" style="background:linear-gradient(100deg,#37dc6e 0%,#7affaa 46%,#9b50ff 54%,#d565ff 100%);color:#fff;text-shadow:0 1px 3px #000;border-color:rgba(255,255,255,.38)" onclick="haSetLampPalette('aurora')">AURORA</button>
+      <button id="haPaletteCyberOrchid" class="btn control-btn palette-btn preset-cool" style="background:linear-gradient(100deg,#00dcff 0%,#66f5ff 46%,#e641ff 54%,#ff86f7 100%);color:#07111f;text-shadow:0 1px 2px rgba(255,255,255,.35);border-color:rgba(255,255,255,.45)" onclick="haSetLampPalette('cyber_orchid')">CYBER ORCHID</button>
+      <button id="haPaletteEmberForest" class="btn control-btn palette-btn preset-warm" style="background:linear-gradient(100deg,#ff5624 0%,#ffb13a 46%,#23be5f 54%,#84ff9a 100%);color:#fff;text-shadow:0 1px 3px #000;border-color:rgba(255,255,255,.38)" onclick="haSetLampPalette('ember_forest')">EMBER FOREST</button>
+      <button id="haPaletteMoonGrove" class="btn control-btn palette-btn preset-money" style="background:linear-gradient(100deg,#5fb4ff 0%,#b8e4ff 46%,#55eb91 54%,#b8ffce 100%);color:#07111f;text-shadow:0 1px 2px rgba(255,255,255,.35);border-color:rgba(255,255,255,.45)" onclick="haSetLampPalette('moon_grove')">MOON GROVE</button>
     </div>
-    <div class="ha-device-row" id="haSpeakerRightRow">
-      <span class="material-symbols-rounded ha-device-icon">speaker</span>
-      <span class="ha-device-label">Speaker Right</span>
-      <div id="haSpeakerRightToggle"></div>
+    <div class="head-palette-row" style="margin-top:8px;">
+      <button id="haPaletteCool" class="btn control-btn palette-btn preset-cool" style="background:linear-gradient(100deg,#305cff,#50d8ff);color:#fff;text-shadow:0 1px 3px #000" onclick="haSetLampPalette('cool')">COOL</button>
+      <button id="haPaletteWarm" class="btn control-btn palette-btn preset-warm" style="background:linear-gradient(100deg,#ff4b1f,#ffb43a);color:#fff;text-shadow:0 1px 3px #000" onclick="haSetLampPalette('warm')">WARM</button>
+      <button id="haPaletteMoney" class="btn control-btn palette-btn preset-money" style="background:linear-gradient(100deg,#1b9d45,#84ff9a);color:#07111f;text-shadow:0 1px 2px rgba(255,255,255,.35)" onclick="haSetLampPalette('money')">MONEY</button>
+      <button id="haPaletteCandle" class="btn control-btn palette-btn preset-candle" style="background:linear-gradient(100deg,#7a2f12,#ff9e3d,#ffd28a);color:#fff;text-shadow:0 1px 3px #000" onclick="haSetLampPalette('candle')">CANDLE</button>
     </div>
-    <div class="ha-device-row">
-      <span class="material-symbols-rounded ha-device-icon">surround_sound</span>
-      <span class="ha-device-label">Both Speakers</span>
-      <button id="haBothSpeakersBtn" class="btn control-btn" onclick="haToggleBothSpeakers()" style="padding:6px 14px;font-size:12px;">Toggle</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="panel-title"><span class="material-symbols-rounded label-icon">lightbulb</span>Lamps, Scenes & Dimmer</div>
-    <div class="ha-device-row" id="haLampLeftRow">
-      <span class="material-symbols-rounded ha-device-icon">lightbulb</span>
-      <span class="ha-device-label">Lamp Left</span>
-      <div id="haLampLeftToggle"></div>
-    </div>
-    <div class="ha-device-row" id="haLampRightRow">
-      <span class="material-symbols-rounded ha-device-icon">lightbulb</span>
-      <span class="ha-device-label">Lamp Right</span>
-      <div id="haLampRightToggle"></div>
-    </div>
-    <div class="ha-device-row">
-      <span class="material-symbols-rounded ha-device-icon">wb_incandescent</span>
-      <span class="ha-device-label">Both Lamps</span>
-      <button id="haBothLampsBtn" class="btn control-btn" onclick="haToggleBothLamps()" style="padding:6px 14px;font-size:12px;">Toggle</button>
-    </div>
-
-    <div style="margin-top:14px;">
-      <div class="small muted" style="margin-bottom:8px;"><span class="material-symbols-rounded label-icon">palette</span>Lamp Colors</div>
-      <div class="head-palette-row">
-        <button id="haPaletteCool" class="btn control-btn palette-btn preset-cool" onclick="haSetLampPalette('cool')">COOL</button>
-        <button id="haPaletteMoney" class="btn control-btn palette-btn preset-money" onclick="haSetLampPalette('money')">MONEY</button>
-        <button id="haPaletteWarm" class="btn control-btn palette-btn preset-warm" onclick="haSetLampPalette('warm')">WARM</button>
-        <button id="haPaletteCandle" class="btn control-btn palette-btn preset-candle" onclick="haSetLampPalette('candle')">CANDLE</button>
-      </div>
-      <div id="haLampPaletteMsg" class="small muted" style="margin-top:4px;"></div>
-      <div id="haLampPaletteLast" class="small muted" style="margin-top:4px;"></div>
-    </div>
-
-    <div style="margin-top:14px;">
-      <div class="small muted" style="margin-bottom:6px;"><span class="material-symbols-rounded label-icon">gradient</span>Gradient Effect</div>
-      <div class="row" style="align-items:center;">
-        <select id="haLampEffect" class="wide" style="max-width:320px;"></select>
-        <button id="haLampEffectBtn" class="btn control-btn" onclick="haApplyLampEffect()">Apply</button>
-      </div>
-      <div id="haLampEffectCurrent" class="small muted" style="margin-top:4px;">Current effect: --</div>
-      <div id="haLampEffectMsg" class="small muted" style="margin-top:4px;"></div>
-    </div>
-
-    <div style="margin-top:14px;">
-      <div class="small muted" style="margin-bottom:6px;"><span class="material-symbols-rounded label-icon">tune</span>Dimmer</div>
-      <div class="row" style="align-items:center;gap:12px;">
-        <input id="haLampDimmer" type="range" min="1" max="100" step="1" value="80" class="dimmer-slider" oninput="haLampDimmerInputChanged()">
-        <span id="haLampDimmerValue" class="status-pill status-warn" style="min-width:48px;text-align:center;">80%</span>
-      </div>
-      <div id="haLampDimmerMsg" class="small muted" style="margin-top:6px;"></div>
-    </div>
+    <div id="haLampPaletteMsg" class="small muted" style="margin-top:8px;"></div>
+    <div id="haLampPaletteLast" class="small muted" style="margin-top:4px;"></div>
   </div>
 
   <div class="card">
@@ -916,19 +972,21 @@ async function haRefreshStatus() {
 
     // Palette active state
     const activePalette = String(st.lamp_palette_last || '').toLowerCase();
-    ['cool','money','warm','candle'].forEach(p => {
-      const btn = document.getElementById('haPalette' + p.charAt(0).toUpperCase() + p.slice(1));
+    ['cool','money','warm','candle','ice_fire','aurora','cyber_orchid','ember_forest','moon_grove'].forEach(p => {
+      const btn = document.getElementById('haPalette' + p.split('_').map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(''));
       if (btn) btn.classList.toggle('is-active', activePalette === p);
     });
 
     const dimmer = document.getElementById('haLampDimmer');
     const brightness = Number(st.lamp_brightness_last || 80);
-    if (document.activeElement !== dimmer) dimmer.value = brightness;
     const clampedBrightness = Math.max(1, Math.min(100, brightness));
-    document.getElementById('haLampDimmerValue').textContent = clampedBrightness + '%';
+    if (dimmer && document.activeElement !== dimmer) dimmer.value = brightness;
+    const dimmerValue = document.getElementById('haLampDimmerValue');
+    if (dimmerValue) dimmerValue.textContent = clampedBrightness + '%';
     haLampDimmerLastSent = clampedBrightness;
-    document.getElementById('haLampPaletteLast').textContent = st.lamp_palette_last
-      ? ('Last preset: ' + String(st.lamp_palette_last).toUpperCase())
+    const paletteLast = document.getElementById('haLampPaletteLast');
+    if (paletteLast) paletteLast.textContent = st.lamp_palette_last
+      ? ('Last preset: ' + String(st.lamp_palette_last).replace(/_/g, ' ').toUpperCase())
       : 'No lamp color preset applied yet.';
 
     const bothSpeakersOn = speakerLeftOn === true && speakerRightOn === true;
@@ -965,7 +1023,7 @@ async function haSaveConfig() {
     ha_speaker_right_entity: document.getElementById('haSpeakerRightEntity').value.trim(),
     ha_lamp_left_entity: document.getElementById('haLampLeftEntity').value.trim(),
     ha_lamp_right_entity: document.getElementById('haLampRightEntity').value.trim(),
-    ha_lamp_brightness_last: parseInt(document.getElementById('haLampDimmer').value, 10) || 80,
+    ha_lamp_brightness_last: parseInt((document.getElementById('haLampDimmer') || {}).value, 10) || haLampDimmerLastSent || 80,
   };
   const token = document.getElementById('haToken').value.trim();
   if (token) payload.ha_token = token;
@@ -991,7 +1049,7 @@ function haScheduleLampBrightnessApply() {
   if (haLampDimmerDebounceTimer) clearTimeout(haLampDimmerDebounceTimer);
   haLampDimmerDebounceTimer = setTimeout(() => {
     void haApplyLampBrightness(true);
-  }, 240);
+  }, 800);
 }
 
 async function haSetSpeaker(side, on, silent=false) {
@@ -1008,10 +1066,14 @@ async function haToggleBothSpeakers() {
   const st = await api('/api/ha/status');
   const bothOn = String(st.speaker_left_state).toLowerCase() === 'on' && String(st.speaker_right_state).toLowerCase() === 'on';
   const targetOn = !bothOn;
-  const left = haSetSpeaker('left', targetOn, true);
-  const right = haSetSpeaker('right', targetOn, true);
-  await Promise.allSettled([left, right]);
-  if (typeof Toast !== 'undefined') Toast.success(targetOn ? 'Both speakers ON.' : 'Both speakers OFF.');
+  const r = await api('/api/ha/speakers', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({on: targetOn}),
+  });
+  if (typeof Toast !== 'undefined') {
+    r.ok ? Toast.success(targetOn ? 'Both speakers ON.' : 'Both speakers OFF.') : Toast.error(r.message || 'Speaker update failed.');
+  }
   await haRefreshStatus();
 }
 
@@ -1063,8 +1125,9 @@ async function haSetLampPalette(palette) {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({palette}),
   });
-  document.getElementById('haLampPaletteMsg').textContent = r.message || 'Palette applied.';
-  setTimeout(() => document.getElementById('haLampPaletteMsg').textContent = '', 2500);
+  document.getElementById('haLampPaletteMsg').textContent = r.message || (r.ok ? 'Palette applied.' : 'Palette failed.');
+  if (typeof Toast !== 'undefined' && !r.ok) Toast.error(r.message || 'Palette failed.');
+  setTimeout(() => document.getElementById('haLampPaletteMsg').textContent = '', 3500);
   await haRefreshStatus();
 }
 

@@ -21,7 +21,7 @@ from urllib import request as urlrequest
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
-DEFAULT_BASE_URL = "http://10.0.0.38:5000"
+DEFAULT_BASE_URL = "http://10.0.0.38:5100"
 DEFAULT_TIMEOUT_SECONDS = 8
 
 
@@ -54,6 +54,11 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec("palette_warm", ("warm", "warm lights", "warm lamps"), "apply the warm lamp palette", mutates=True),
     CommandSpec("palette_money", ("money", "money lights", "money lamps"), "apply the money lamp palette", mutates=True),
     CommandSpec("palette_candle", ("candle", "candle lights", "candle lamps"), "apply the candle lamp palette", mutates=True),
+    CommandSpec("palette_ice_fire", ("ice/fire", "ice fire", "icefire", "fire ice", "ice/fire lights", "ice fire lights"), "apply Ice/Fire: left cool, right red-warm", mutates=True),
+    CommandSpec("palette_aurora", ("aurora", "aurora lights", "green purple", "green and purple"), "apply Aurora: green and purple", mutates=True),
+    CommandSpec("palette_cyber_orchid", ("cyber orchid", "cyber-orchid", "orchid", "cyan magenta"), "apply Cyber Orchid: cyan and magenta", mutates=True),
+    CommandSpec("palette_ember_forest", ("ember forest", "ember-forest", "orange green", "fire forest"), "apply Ember Forest: orange and green", mutates=True),
+    CommandSpec("palette_moon_grove", ("moon grove", "moon-grove", "blue green", "moon garden"), "apply Moon Grove: blue and green", mutates=True),
     CommandSpec("pump_on", ("pump on", "start pump", "manual pump on"), "start one bounded manual pump run", mutates=True),
     CommandSpec("pump_off", ("pump off", "stop pump", "manual pump off"), "stop manual/active pump run", mutates=True),
     CommandSpec("pihole", ("pihole", "dns"), "Pi-hole blocking/metrics summary"),
@@ -344,13 +349,10 @@ def set_lights(on: bool) -> str:
 
 
 def set_speakers(on: bool) -> str:
-    left = _json_request("/api/ha/speaker", method="POST", payload={"side": "left", "on": bool(on)})
-    right = _json_request("/api/ha/speaker", method="POST", payload={"side": "right", "on": bool(on)})
-    status = right.get("ha_status") if isinstance(right.get("ha_status"), dict) else _safe_request("/api/ha/status")
+    result = _json_request("/api/ha/speakers", method="POST", payload={"on": bool(on)})
+    status = result.get("ha_status") if isinstance(result.get("ha_status"), dict) else _safe_request("/api/ha/status")
     return "\n".join([
-        f"Speakers {'on' if on else 'off'} requested.",
-        f"Left: {left.get('message', 'ok')}",
-        f"Right: {right.get('message', 'ok')}",
+        f"Speakers {'on' if on else 'off'}: {result.get('message', 'requested')}",
         f"Speakers: {_ha_speaker_summary(status)}",
     ])
 
@@ -368,8 +370,7 @@ def set_shop_open(open_shop: bool) -> str:
 
     operations = [
         ("lamps", "/api/ha/lamps", {"on": target}),
-        ("left speaker", "/api/ha/speaker", {"side": "left", "on": target}),
-        ("right speaker", "/api/ha/speaker", {"side": "right", "on": target}),
+        ("speakers", "/api/ha/speakers", {"on": target}),
     ]
     latest_status: dict[str, Any] | None = None
     for label, path, payload in operations:
@@ -396,8 +397,9 @@ def set_shop_open(open_shop: bool) -> str:
 
 def set_lamp_palette(palette: str) -> str:
     palette_name = str(palette).strip().lower()
-    if palette_name not in {"cool", "warm", "money", "candle"}:
-        raise OpsError("Palette must be cool, warm, money, or candle.")
+    allowed = {"cool", "warm", "money", "candle", "ice_fire", "aurora", "cyber_orchid", "ember_forest", "moon_grove"}
+    if palette_name not in allowed:
+        raise OpsError("Palette must be cool, warm, money, candle, ice_fire, aurora, cyber_orchid, ember_forest, or moon_grove.")
     result = _json_request("/api/ha/lamp_palette", method="POST", payload={"palette": palette_name})
     status = result.get("ha_status") if isinstance(result.get("ha_status"), dict) else _safe_request("/api/ha/status")
     return "\n".join([
@@ -552,6 +554,16 @@ def apply_command(text: str) -> str:
         return set_lamp_palette("money")
     if command == "palette_candle":
         return set_lamp_palette("candle")
+    if command == "palette_ice_fire":
+        return set_lamp_palette("ice_fire")
+    if command == "palette_aurora":
+        return set_lamp_palette("aurora")
+    if command == "palette_cyber_orchid":
+        return set_lamp_palette("cyber_orchid")
+    if command == "palette_ember_forest":
+        return set_lamp_palette("ember_forest")
+    if command == "palette_moon_grove":
+        return set_lamp_palette("moon_grove")
     if command == "pump_on":
         return set_pump(True)
     if command == "pump_off":

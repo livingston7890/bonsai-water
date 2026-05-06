@@ -526,6 +526,11 @@ function masterSetPaletteState(activePalette) {
     ['headPaletteMoney', 'money'],
     ['headPaletteWarm', 'warm'],
     ['headPaletteCandle', 'candle'],
+    ['headPaletteIceFire', 'ice_fire'],
+    ['headPaletteAurora', 'aurora'],
+    ['headPaletteCyberOrchid', 'cyber_orchid'],
+    ['headPaletteEmberForest', 'ember_forest'],
+    ['headPaletteMoonGrove', 'moon_grove'],
   ];
   for (const [id, palette] of pairs) {
     const btn = document.getElementById(id);
@@ -1689,7 +1694,7 @@ def create_app(plugins: list[Any]) -> Flask:
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 24px;
+      gap: 14px;
       flex-wrap: wrap;
     }
     .head-quick-group {
@@ -1703,8 +1708,19 @@ def create_app(plugins: list[Any]) -> Flask:
     .head-quick-group-shop {
       flex: 0 0 auto;
     }
+    .head-quick-group-power {
+      flex: 0 0 auto;
+      padding: 5px 6px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
     .head-quick-group-palette {
-      flex: 0 1 auto;
+      flex: 1 1 620px;
+      padding: 5px 6px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
     }
     .head-quick-label {
       display: inline-flex;
@@ -1741,11 +1757,33 @@ def create_app(plugins: list[Any]) -> Flask:
       align-items: center;
       gap: 6px;
       flex-wrap: wrap;
+      max-width: 860px;
     }
     .head-palette-row .btn.is-active {
-      border-color: rgba(255, 255, 255, 0.42);
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+      border-color: rgba(255, 255, 255, 0.58);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset, 0 0 18px rgba(139, 165, 255, 0.18);
     }
+    .head-palette-row .preset-btn {
+      min-width: 82px;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+      border-color: rgba(255, 255, 255, 0.26);
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+    }
+    .head-palette-row .preset-btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.48);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+    }
+    .head-palette-row .palette-cool { background: linear-gradient(100deg,#496dff 0%,#6f95ff 46%,#70e7ff 100%); }
+    .head-palette-row .palette-money { background: linear-gradient(100deg,#22b85f 0%,#37dc6e 48%,#a2ff9f 100%); }
+    .head-palette-row .palette-warm { background: linear-gradient(100deg,#ff8a24 0%,#ffb25a 48%,#ff5d2e 100%); }
+    .head-palette-row .palette-candle { background: linear-gradient(100deg,#f2b866 0%,#ffda8a 48%,#cf8541 100%); color: #2b1608; text-shadow: 0 1px 2px rgba(255,255,255,.35); }
+    .head-palette-row .palette-ice-fire { background: linear-gradient(100deg,#5096ff 0%,#70e7ff 46%,#ff2012 54%,#ff6a2a 100%); }
+    .head-palette-row .palette-aurora { background: linear-gradient(100deg,#37dc6e 0%,#7affaa 46%,#9b50ff 54%,#d565ff 100%); }
+    .head-palette-row .palette-cyber-orchid { background: linear-gradient(100deg,#00dcff 0%,#66f5ff 46%,#e641ff 54%,#ff86f7 100%); color: #07111f; text-shadow: 0 1px 2px rgba(255,255,255,.35); }
+    .head-palette-row .palette-ember-forest { background: linear-gradient(100deg,#ff8a24 0%,#ffd166 46%,#2bc96f 54%,#7affaa 100%); }
+    .head-palette-row .palette-moon-grove { background: linear-gradient(100deg,#496dff 0%,#89a7ff 46%,#1fbd73 54%,#8df0b1 100%); }
     .layout {
       display: grid;
       grid-template-columns: 300px minmax(0, 1fr);
@@ -2471,21 +2509,23 @@ def create_app(plugins: list[Any]) -> Flask:
       <div class=\"head-quick-group head-quick-group-shop\">
         <button id=\"headShopToggleBtn\" class=\"btn head-quick-btn head-shop-btn state-danger\" onclick=\"masterToggleShopMode()\">Shop Closed</button>
       </div>
-      <div class=\"head-quick-group\">
-        <span class=\"head-quick-icon material-symbols-rounded label-icon\" aria-hidden=\"true\">speaker</span>
+      <div class=\"head-quick-group head-quick-group-power\">
+        <span class=\"head-quick-label\"><span class=\"material-symbols-rounded label-icon\">power_settings_new</span>Power</span>
         <button id=\"headHaSpeakersToggleBtn\" class=\"btn head-quick-btn head-shop-btn state-danger\" onclick=\"masterToggleHaSpeakers()\">Speakers Off</button>
-      </div>
-      <div class=\"head-quick-group\">
-        <span class=\"head-quick-icon material-symbols-rounded label-icon\" aria-hidden=\"true\">lightbulb</span>
         <button id=\"headHaLampsToggleBtn\" class=\"btn head-quick-btn head-shop-btn state-danger\" onclick=\"masterToggleHaLamps()\">Lamps Off</button>
       </div>
       <div class=\"head-quick-group head-quick-group-palette\">
         <span class=\"head-quick-label\"><span class=\"material-symbols-rounded label-icon\">palette</span>Lamp Colors</span>
         <div class=\"head-palette-row\">
-          <button id=\"headPaletteCool\" class=\"btn head-quick-btn preset-btn preset-cool\" onclick=\"masterSetHaLampPalette('cool')\">COOL</button>
-          <button id=\"headPaletteMoney\" class=\"btn head-quick-btn preset-btn preset-money\" onclick=\"masterSetHaLampPalette('money')\">MONEY</button>
-          <button id=\"headPaletteWarm\" class=\"btn head-quick-btn preset-btn preset-warm\" onclick=\"masterSetHaLampPalette('warm')\">WARM</button>
-          <button id=\"headPaletteCandle\" class=\"btn head-quick-btn preset-btn preset-candle\" onclick=\"masterSetHaLampPalette('candle')\">CANDLE</button>
+          <button id=\"headPaletteCool\" class=\"btn head-quick-btn preset-btn palette-cool\" onclick=\"masterSetHaLampPalette('cool')\">COOL</button>
+          <button id=\"headPaletteMoney\" class=\"btn head-quick-btn preset-btn palette-money\" onclick=\"masterSetHaLampPalette('money')\">MONEY</button>
+          <button id=\"headPaletteWarm\" class=\"btn head-quick-btn preset-btn palette-warm\" onclick=\"masterSetHaLampPalette('warm')\">WARM</button>
+          <button id=\"headPaletteCandle\" class=\"btn head-quick-btn preset-btn palette-candle\" onclick=\"masterSetHaLampPalette('candle')\">CANDLE</button>
+          <button id=\"headPaletteIceFire\" class=\"btn head-quick-btn preset-btn palette-ice-fire\" onclick=\"masterSetHaLampPalette('ice_fire')\">ICE/FIRE</button>
+          <button id=\"headPaletteAurora\" class=\"btn head-quick-btn preset-btn palette-aurora\" onclick=\"masterSetHaLampPalette('aurora')\">AURORA</button>
+          <button id=\"headPaletteCyberOrchid\" class=\"btn head-quick-btn preset-btn palette-cyber-orchid\" onclick=\"masterSetHaLampPalette('cyber_orchid')\">CYBER ORCHID</button>
+          <button id=\"headPaletteEmberForest\" class=\"btn head-quick-btn preset-btn palette-ember-forest\" onclick=\"masterSetHaLampPalette('ember_forest')\">EMBER FOREST</button>
+          <button id=\"headPaletteMoonGrove\" class=\"btn head-quick-btn preset-btn palette-moon-grove\" onclick=\"masterSetHaLampPalette('moon_grove')\">MOON GROVE</button>
         </div>
       </div>
     </div>
