@@ -2523,7 +2523,7 @@ def create_app(plugins: list[Any]) -> Flask:
       .head-quick-btn { min-height: 40px; }
     }
   </style>
-  <link rel="stylesheet" href="/static/delight.css?v=palette-rail-20260515">
+  <link rel="stylesheet" href="/static/delight.css?v=palette-stack-20260515">
 </head>
 <body>
 <div class=\"toast-container\" id=\"toastContainer\"></div>

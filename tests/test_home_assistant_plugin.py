@@ -138,8 +138,9 @@ class HomeAssistantLampControlTests(TestCase):
         self.assertEqual(calls[1][:3], ("light", "turn_on", "light.right"))
         self.assertEqual(calls[1][3]["rgb_color"], [0, 217, 255])
 
-    def test_palette_catalog_ui_uses_one_scrollable_rail(self):
+    def test_palette_catalog_ui_uses_compact_stacked_rail(self):
         html = self.make_plugin().dashboard_html()
+        css = (ROOT / "static" / "delight.css").read_text()
         expected = {
             "miami_vice": "MIAMI VICE",
             "tokyo_night": "TOKYO NIGHT",
@@ -152,6 +153,10 @@ class HomeAssistantLampControlTests(TestCase):
             self.assertIn(f"haSetLampPalette('{palette}')", html)
             self.assertIn(label, html)
         self.assertEqual(html.count('head-palette-row palette-rail'), 1)
-        self.assertNotIn('repeat(2, minmax(0, 1fr))', html)
+        self.assertIn('grid-template-columns: repeat(4, minmax(0, 1fr))', css)
+        self.assertIn('overflow: hidden !important', css)
+        self.assertNotIn('overflow-x: auto !important', css)
+        self.assertNotIn('min-width: 96px !important', css)
+        self.assertNotIn('repeat(2, minmax(0, 1fr))', html + css)
 
 

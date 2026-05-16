@@ -328,19 +328,28 @@ input[type=range].dimmer-slider::-webkit-slider-thumb:hover {
 .palette-btn.palette-golden-hour.is-active { --palette-glow: rgba(255,179,71,0.34); border-color: rgba(255,205,120,0.76); }
 .palette-btn.palette-jade-temple.is-active { --palette-glow: rgba(0,201,134,0.3); border-color: rgba(134,238,190,0.76); }
 
-.head-palette-row.palette-rail {
-  flex-wrap: nowrap !important;
-  overflow-x: auto;
-  overflow-y: hidden;
+.head-quick-group-palette {
+  overflow: hidden;
   max-width: 100%;
-  padding-bottom: 6px;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
-  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+}
+.head-palette-row.palette-rail {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+  flex-wrap: initial !important;
+  overflow: visible;
+  max-width: 100%;
+  width: 100%;
+  gap: 6px;
+  padding-bottom: 0;
+  scroll-snap-type: none;
+  scrollbar-width: none;
 }
 .head-palette-row.palette-rail .btn {
-  flex: 0 0 auto;
-  scroll-snap-align: start;
+  flex: initial !important;
+  min-width: 0;
+  width: 100%;
+  scroll-snap-align: none;
 }
 
 /* ── Bonsai module monitor layout ── */
@@ -429,24 +438,32 @@ html[data-theme="dark"] body::before{content:"";position:fixed;inset:0;pointer-e
   .head-shop-btn {
     min-width: 132px !important;
   }
-  .head-palette-row {
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    grid-template-columns: none !important;
+  .head-quick-group-palette {
     width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+  .head-palette-row {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    flex-wrap: initial !important;
+    width: 100% !important;
+    max-width: 100% !important;
     gap: 6px !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    padding-bottom: 6px !important;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible !important;
+    padding-bottom: 0 !important;
   }
   .head-palette-row .preset-btn,
   .head-palette-row .btn {
-    width: auto !important;
-    min-width: 96px !important;
-    flex: 0 0 auto !important;
-    padding-left: 10px !important;
-    padding-right: 10px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 34px !important;
+    flex: initial !important;
+    padding: 6px 4px !important;
+    font-size: 10px !important;
+    letter-spacing: .045em !important;
+    line-height: 1.05 !important;
   }
   .card {
     padding: 12px !important;
