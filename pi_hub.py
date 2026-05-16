@@ -522,17 +522,17 @@ function masterSetStatePillButton(id, state, onLabel='ON', offLabel='OFF', unkno
 function masterSetPaletteState(activePalette) {
   const active = String(activePalette || '').trim().toLowerCase();
   const pairs = [
-    ['headPaletteCool', 'cool'],
-    ['headPaletteMoney', 'money'],
-    ['headPaletteWarm', 'warm'],
     ['headPaletteCandle', 'candle'],
+    ['headPaletteCool', 'cool'],
+    ['headPaletteWarm', 'warm'],
+    ['headPaletteMoney', 'money'],
+    ['headPaletteIceFire', 'ice_fire'],
+    ['headPaletteAurora', 'aurora'],
+    ['headPaletteEmberForest', 'ember_forest'],
+    ['headPaletteCyberOrchid', 'cyber_orchid'],
     ['headPaletteMiamiVice', 'miami_vice'],
     ['headPaletteTokyoNight', 'tokyo_night'],
     ['headPaletteDeepOcean', 'deep_ocean'],
-    ['headPaletteIceFire', 'ice_fire'],
-    ['headPaletteAurora', 'aurora'],
-    ['headPaletteCyberOrchid', 'cyber_orchid'],
-    ['headPaletteEmberForest', 'ember_forest'],
     ['headPaletteMoonGrove', 'moon_grove'],
   ];
   for (const [id, palette] of pairs) {

@@ -789,18 +789,18 @@ class HomeAssistantPlugin:
     <div class="panel-title"><span class="material-symbols-rounded label-icon">palette</span>Lamp Palettes</div>
     <div class="panel-meta">Color presets only. On/off, speaker, scenes, and dimmer controls stay hidden until the device path is reliable.</div>
     <div class="head-palette-row palette-rail" aria-label="Lamp color presets" style="margin-top:12px;">
-      <button id="haPaletteCool" class="btn control-btn palette-btn preset-cool palette-cool" onclick="haSetLampPalette('cool')">COOL</button>
-      <button id="haPaletteMoney" class="btn control-btn palette-btn preset-money palette-money" onclick="haSetLampPalette('money')">MONEY</button>
-      <button id="haPaletteWarm" class="btn control-btn palette-btn preset-warm palette-warm" onclick="haSetLampPalette('warm')">WARM</button>
       <button id="haPaletteCandle" class="btn control-btn palette-btn preset-candle palette-candle" onclick="haSetLampPalette('candle')">CANDLE</button>
-      <button id="haPaletteMiamiVice" class="btn control-btn palette-btn palette-miami-vice" onclick="haSetLampPalette('miami_vice')">MIAMI VICE</button>
-      <button id="haPaletteTokyoNight" class="btn control-btn palette-btn palette-tokyo-night" onclick="haSetLampPalette('tokyo_night')">TOKYO NIGHT</button>
-      <button id="haPaletteDeepOcean" class="btn control-btn palette-btn palette-deep-ocean" onclick="haSetLampPalette('deep_ocean')">DEEP OCEAN</button>
+      <button id="haPaletteCool" class="btn control-btn palette-btn preset-cool palette-cool" onclick="haSetLampPalette('cool')">COOL</button>
+      <button id="haPaletteWarm" class="btn control-btn palette-btn preset-warm palette-warm" onclick="haSetLampPalette('warm')">WARM</button>
+      <button id="haPaletteMoney" class="btn control-btn palette-btn preset-money palette-money" onclick="haSetLampPalette('money')">MONEY</button>
       <button id="haPaletteIceFire" class="btn control-btn palette-btn palette-ice-fire" onclick="haSetLampPalette('ice_fire')">ICE/FIRE</button>
       <button id="haPaletteAurora" class="btn control-btn palette-btn palette-aurora" onclick="haSetLampPalette('aurora')">AURORA</button>
-      <button id="haPaletteCyberOrchid" class="btn control-btn palette-btn palette-cyber-orchid" onclick="haSetLampPalette('cyber_orchid')">CYBER ORCHID</button>
-      <button id="haPaletteEmberForest" class="btn control-btn palette-btn palette-ember-forest" onclick="haSetLampPalette('ember_forest')">EMBER FOREST</button>
-      <button id="haPaletteMoonGrove" class="btn control-btn palette-btn palette-moon-grove" onclick="haSetLampPalette('moon_grove')">MOON GROVE</button>
+      <button id="haPaletteEmberForest" class="btn control-btn palette-btn palette-ember-forest" onclick="haSetLampPalette('ember_forest')">EMBER</button>
+      <button id="haPaletteCyberOrchid" class="btn control-btn palette-btn palette-cyber-orchid" onclick="haSetLampPalette('cyber_orchid')">CYBER</button>
+      <button id="haPaletteMiamiVice" class="btn control-btn palette-btn palette-miami-vice" onclick="haSetLampPalette('miami_vice')">MIAMI</button>
+      <button id="haPaletteTokyoNight" class="btn control-btn palette-btn palette-tokyo-night" onclick="haSetLampPalette('tokyo_night')">TOKYO</button>
+      <button id="haPaletteDeepOcean" class="btn control-btn palette-btn palette-deep-ocean" onclick="haSetLampPalette('deep_ocean')">OCEAN</button>
+      <button id="haPaletteMoonGrove" class="btn control-btn palette-btn palette-moon-grove" onclick="haSetLampPalette('moon_grove')">MOON</button>
     </div>
     <div id="haLampPaletteMsg" class="small muted" style="margin-top:8px;"></div>
     <div id="haLampPaletteLast" class="small muted" style="margin-top:4px;"></div>
