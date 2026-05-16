@@ -1566,7 +1566,11 @@ def create_app(plugins: list[Any]) -> Flask:
 <html data-theme=\"dark\">
 <head>
   <meta charset=\"utf-8\">
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">
+  <meta name=\"theme-color\" content=\"#0f141f\">
+  <meta name=\"apple-mobile-web-app-capable\" content=\"yes\">
+  <meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">
+  <meta name=\"apple-mobile-web-app-title\" content=\"Pi Hub\">
   <title>Pi Control Hub</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0&display=swap');
