@@ -179,10 +179,12 @@ class HomeAssistantLampControlTests(TestCase):
         self.assertEqual([html.index(item) for item in expected_order], sorted(html.index(item) for item in expected_order))
 
         hub_html = (ROOT / "pi_hub.py").read_text()
+        hub_block = hub_html[hub_html.index('aria-label=\\"Lamp color presets\\"'):]
+        hub_block = hub_block[:hub_block.index('</div>')]
         expected_head_order = [item.replace("haPalette", "headPalette") for item in expected_order]
         self.assertEqual(
-            [hub_html.index(item) for item in expected_head_order],
-            sorted(hub_html.index(item) for item in expected_head_order),
+            [hub_block.index(item) for item in expected_head_order],
+            sorted(hub_block.index(item) for item in expected_head_order),
         )
         self.assertEqual(html.count('head-palette-row palette-rail'), 1)
         self.assertIn('grid-template-columns: repeat(4, minmax(0, 1fr))', css)

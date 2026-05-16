@@ -2540,17 +2540,17 @@ def create_app(plugins: list[Any]) -> Flask:
       <div class=\"head-quick-group head-quick-group-palette\">
         <span class=\"head-quick-label\"><span class=\"material-symbols-rounded label-icon\">palette</span>Lamp Colors</span>
         <div class=\"head-palette-row palette-rail\" aria-label=\"Lamp color presets\">
+          <button id=\"headPaletteCandle\" class=\"btn head-quick-btn preset-btn palette-candle\" onclick=\"masterSetHaLampPalette('candle')\">CANDLE</button>
           <button id=\"headPaletteCool\" class=\"btn head-quick-btn preset-btn palette-cool\" onclick=\"masterSetHaLampPalette('cool')\">COOL</button>
+          <button id=\"headPaletteWarm\" class=\"btn head-quick-btn preset-btn palette-warm\" onclick=\"masterSetHaLampPalette('warm')\">WARM</button>
           <button id=\"headPaletteMoney\" class=\"btn head-quick-btn preset-btn palette-money\" onclick=\"masterSetHaLampPalette('money')\">MONEY</button>
+          <button id=\"headPaletteIceFire\" class=\"btn head-quick-btn preset-btn palette-ice-fire\" onclick=\"masterSetHaLampPalette('ice_fire')\">ICE/FIRE</button>
+          <button id=\"headPaletteAurora\" class=\"btn head-quick-btn preset-btn palette-aurora\" onclick=\"masterSetHaLampPalette('aurora')\">AURORA</button>
+          <button id=\"headPaletteEmberForest\" class=\"btn head-quick-btn preset-btn palette-ember-forest\" onclick=\"masterSetHaLampPalette('ember_forest')\">EMBER</button>
+          <button id=\"headPaletteCyberOrchid\" class=\"btn head-quick-btn preset-btn palette-cyber-orchid\" onclick=\"masterSetHaLampPalette('cyber_orchid')\">CYBER</button>
           <button id=\"headPaletteMiamiVice\" class=\"btn head-quick-btn preset-btn palette-miami-vice\" onclick=\"masterSetHaLampPalette('miami_vice')\">MIAMI</button>
           <button id=\"headPaletteTokyoNight\" class=\"btn head-quick-btn preset-btn palette-tokyo-night\" onclick=\"masterSetHaLampPalette('tokyo_night')\">TOKYO</button>
           <button id=\"headPaletteDeepOcean\" class=\"btn head-quick-btn preset-btn palette-deep-ocean\" onclick=\"masterSetHaLampPalette('deep_ocean')\">OCEAN</button>
-          <button id=\"headPaletteWarm\" class=\"btn head-quick-btn preset-btn palette-warm\" onclick=\"masterSetHaLampPalette('warm')\">WARM</button>
-          <button id=\"headPaletteCandle\" class=\"btn head-quick-btn preset-btn palette-candle\" onclick=\"masterSetHaLampPalette('candle')\">CANDLE</button>
-          <button id=\"headPaletteIceFire\" class=\"btn head-quick-btn preset-btn palette-ice-fire\" onclick=\"masterSetHaLampPalette('ice_fire')\">ICE/FIRE</button>
-          <button id=\"headPaletteAurora\" class=\"btn head-quick-btn preset-btn palette-aurora\" onclick=\"masterSetHaLampPalette('aurora')\">AURORA</button>
-          <button id=\"headPaletteCyberOrchid\" class=\"btn head-quick-btn preset-btn palette-cyber-orchid\" onclick=\"masterSetHaLampPalette('cyber_orchid')\">CYBER</button>
-          <button id=\"headPaletteEmberForest\" class=\"btn head-quick-btn preset-btn palette-ember-forest\" onclick=\"masterSetHaLampPalette('ember_forest')\">EMBER</button>
           <button id=\"headPaletteMoonGrove\" class=\"btn head-quick-btn preset-btn palette-moon-grove\" onclick=\"masterSetHaLampPalette('moon_grove')\">MOON</button>
         </div>
       </div>
