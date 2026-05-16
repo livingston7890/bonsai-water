@@ -1571,6 +1571,9 @@ def create_app(plugins: list[Any]) -> Flask:
   <meta name=\"apple-mobile-web-app-capable\" content=\"yes\">
   <meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">
   <meta name=\"apple-mobile-web-app-title\" content=\"Pi Hub\">
+  <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"/static/icons/pi-hub-icon-180.png?v=mobile-compact-20260515\">
+  <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"/static/icons/pi-hub-icon-180.png?v=mobile-compact-20260515\">
+  <link rel=\"manifest\" href=\"/static/manifest.json?v=mobile-compact-20260515\">
   <title>Pi Control Hub</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0&display=swap');
@@ -2500,7 +2503,7 @@ def create_app(plugins: list[Any]) -> Flask:
       .head-quick-btn { min-height: 40px; }
     }
   </style>
-  <link rel="stylesheet" href="/static/delight.css">
+  <link rel="stylesheet" href="/static/delight.css?v=mobile-compact-20260515">
 </head>
 <body>
 <div class=\"toast-container\" id=\"toastContainer\"></div>
