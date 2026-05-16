@@ -117,4 +117,41 @@ class HomeAssistantLampControlTests(TestCase):
         self.assertEqual(calls[1][:3], ("light", "turn_on", "light.right"))
         self.assertEqual(calls[1][3]["rgb_color"], [255, 32, 18])
 
+    def test_new_scene_palette_sends_different_payloads_to_left_and_right(self):
+        plugin = self.make_plugin()
+        calls = []
+
+        def fake_call(domain, service, entity_id, extra=None):
+            calls.append((domain, service, entity_id, extra))
+            return True, "OK"
+
+        plugin._call_service = fake_call
+        plugin._verify_light_result = lambda entity, **kwargs: (True, "OK")
+
+        ok, message = plugin.set_lamp_palette("miami vice")
+
+        self.assertTrue(ok)
+        self.assertIn("Miami Vice palette", message)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][:3], ("light", "turn_on", "light.left"))
+        self.assertEqual(calls[0][3]["rgb_color"], [255, 63, 164])
+        self.assertEqual(calls[1][:3], ("light", "turn_on", "light.right"))
+        self.assertEqual(calls[1][3]["rgb_color"], [0, 217, 255])
+
+    def test_palette_catalog_ui_uses_one_scrollable_rail(self):
+        html = self.make_plugin().dashboard_html()
+        expected = {
+            "miami_vice": "MIAMI VICE",
+            "tokyo_night": "TOKYO NIGHT",
+            "deep_ocean": "DEEP OCEAN",
+            "golden_hour": "GOLDEN HOUR",
+            "jade_temple": "JADE TEMPLE",
+        }
+        for palette, label in expected.items():
+            self.assertIn(palette, ha_module.LAMP_PALETTES)
+            self.assertIn(f"haSetLampPalette('{palette}')", html)
+            self.assertIn(label, html)
+        self.assertEqual(html.count('head-palette-row palette-rail'), 1)
+        self.assertNotIn('repeat(2, minmax(0, 1fr))', html)
+
 

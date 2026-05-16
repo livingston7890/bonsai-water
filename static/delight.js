@@ -235,10 +235,20 @@ function renderMoistureChart(containerId, readings, low, high) {
 
 /* ── Ambient header glow for lamp palette ── */
 const PALETTE_GLOWS = {
-  cool:   'rgba(99,124,221,0.2)',
-  money:  'rgba(56,172,88,0.18)',
-  warm:   'rgba(249,149,76,0.2)',
+  cool: 'rgba(99,124,221,0.2)',
+  money: 'rgba(56,172,88,0.18)',
+  warm: 'rgba(249,149,76,0.2)',
   candle: 'rgba(236,178,98,0.18)',
+  ice_fire: 'rgba(255,80,50,0.2)',
+  aurora: 'rgba(120,255,170,0.18)',
+  cyber_orchid: 'rgba(230,65,255,0.2)',
+  ember_forest: 'rgba(255,130,40,0.18)',
+  moon_grove: 'rgba(95,180,255,0.18)',
+  miami_vice: 'rgba(255,63,164,0.22)',
+  tokyo_night: 'rgba(150,70,255,0.22)',
+  deep_ocean: 'rgba(0,191,166,0.2)',
+  golden_hour: 'rgba(255,179,71,0.2)',
+  jade_temple: 'rgba(0,201,134,0.18)',
 };
 
 function setAmbientGlow(palette) {

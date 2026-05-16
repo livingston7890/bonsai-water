@@ -59,6 +59,11 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec("palette_cyber_orchid", ("cyber orchid", "cyber-orchid", "orchid", "cyan magenta"), "apply Cyber Orchid: cyan and magenta", mutates=True),
     CommandSpec("palette_ember_forest", ("ember forest", "ember-forest", "orange green", "fire forest"), "apply Ember Forest: orange and green", mutates=True),
     CommandSpec("palette_moon_grove", ("moon grove", "moon-grove", "blue green", "moon garden"), "apply Moon Grove: blue and green", mutates=True),
+    CommandSpec("palette_miami_vice", ("miami vice", "miami-vice", "vice", "pink cyan"), "apply Miami Vice: hot pink and cyan", mutates=True),
+    CommandSpec("palette_tokyo_night", ("tokyo night", "tokyo-night", "tokyo", "indigo magenta"), "apply Tokyo Night: indigo and magenta", mutates=True),
+    CommandSpec("palette_deep_ocean", ("deep ocean", "deep-ocean", "ocean", "teal blue"), "apply Deep Ocean: teal and royal blue", mutates=True),
+    CommandSpec("palette_golden_hour", ("golden hour", "golden-hour", "golden", "amber peach"), "apply Golden Hour: amber and peach", mutates=True),
+    CommandSpec("palette_jade_temple", ("jade temple", "jade-temple", "jade", "green ivory"), "apply Jade Temple: jade and ivory", mutates=True),
     CommandSpec("pump_on", ("pump on", "start pump", "manual pump on"), "start one bounded manual pump run", mutates=True),
     CommandSpec("pump_off", ("pump off", "stop pump", "manual pump off"), "stop manual/active pump run", mutates=True),
     CommandSpec("pihole", ("pihole", "dns"), "Pi-hole blocking/metrics summary"),
@@ -397,13 +402,15 @@ def set_shop_open(open_shop: bool) -> str:
 
 def set_lamp_palette(palette: str) -> str:
     palette_name = str(palette).strip().lower()
-    allowed = {"cool", "warm", "money", "candle", "ice_fire", "aurora", "cyber_orchid", "ember_forest", "moon_grove"}
+    allowed = {"cool", "warm", "money", "candle", "ice_fire", "aurora", "cyber_orchid", "ember_forest", "moon_grove", "miami_vice", "tokyo_night", "deep_ocean", "golden_hour", "jade_temple"}
     if palette_name not in allowed:
-        raise OpsError("Palette must be cool, warm, money, candle, ice_fire, aurora, cyber_orchid, ember_forest, or moon_grove.")
+        raise OpsError("Palette must be one of: cool, warm, money, candle, ice_fire, aurora, cyber_orchid, ember_forest, moon_grove, miami_vice, tokyo_night, deep_ocean, golden_hour, jade_temple.")
     result = _json_request("/api/ha/lamp_palette", method="POST", payload={"palette": palette_name})
-    status = result.get("ha_status") if isinstance(result.get("ha_status"), dict) else _safe_request("/api/ha/status")
+    raw_status = result.get("ha_status")
+    status = raw_status if isinstance(raw_status, dict) else _safe_request("/api/ha/status")
+    display_name = palette_name.replace("_", " ").title()
     return "\n".join([
-        f"{palette_name.title()} lights: {result.get('message', 'palette requested')}",
+        f"{display_name} lights: {result.get('message', 'palette requested')}",
         f"Lamps: {_ha_lamp_summary(status)}",
         f"Palette: {status.get('palette', status.get('active_palette', palette_name))}",
     ])
@@ -564,6 +571,16 @@ def apply_command(text: str) -> str:
         return set_lamp_palette("ember_forest")
     if command == "palette_moon_grove":
         return set_lamp_palette("moon_grove")
+    if command == "palette_miami_vice":
+        return set_lamp_palette("miami_vice")
+    if command == "palette_tokyo_night":
+        return set_lamp_palette("tokyo_night")
+    if command == "palette_deep_ocean":
+        return set_lamp_palette("deep_ocean")
+    if command == "palette_golden_hour":
+        return set_lamp_palette("golden_hour")
+    if command == "palette_jade_temple":
+        return set_lamp_palette("jade_temple")
     if command == "pump_on":
         return set_pump(True)
     if command == "pump_off":

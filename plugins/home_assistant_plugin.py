@@ -33,6 +33,11 @@ LAMP_PALETTES = {
     "cyber_orchid": {"label": "Cyber Orchid", "mode": "split", "left_rgb": (0, 220, 255), "right_rgb": (230, 65, 255)},
     "ember_forest": {"label": "Ember Forest", "mode": "split", "left_rgb": (255, 86, 36), "right_rgb": (35, 190, 95)},
     "moon_grove": {"label": "Moon Grove", "mode": "split", "left_rgb": (95, 180, 255), "right_rgb": (85, 235, 145)},
+    "miami_vice": {"label": "Miami Vice", "mode": "split", "left_rgb": (255, 63, 164), "right_rgb": (0, 217, 255)},
+    "tokyo_night": {"label": "Tokyo Night", "mode": "split", "left_rgb": (59, 77, 255), "right_rgb": (196, 60, 255)},
+    "deep_ocean": {"label": "Deep Ocean", "mode": "split", "left_rgb": (0, 191, 166), "right_rgb": (36, 92, 255)},
+    "golden_hour": {"label": "Golden Hour", "mode": "split", "left_rgb": (255, 179, 71), "right_rgb": (255, 122, 89)},
+    "jade_temple": {"label": "Jade Temple", "mode": "split", "left_rgb": (0, 201, 134), "right_rgb": (255, 240, 184)},
 }
 
 LIGHT_COMMAND_RETRIES = 2
@@ -782,18 +787,21 @@ class HomeAssistantPlugin:
   <div class="card">
     <div class="panel-title"><span class="material-symbols-rounded label-icon">palette</span>Lamp Palettes</div>
     <div class="panel-meta">Color presets only. On/off, speaker, scenes, and dimmer controls stay hidden until the device path is reliable.</div>
-    <div class="head-palette-row" style="margin-top:12px;">
-      <button id="haPaletteIceFire" class="btn control-btn palette-btn preset-cool" style="background:linear-gradient(100deg,#5096ff 0%,#70e7ff 46%,#ff2012 54%,#ff6a2a 100%);color:#fff;text-shadow:0 1px 3px #000;border-color:rgba(255,255,255,.38)" onclick="haSetLampPalette('ice_fire')">ICE/FIRE</button>
-      <button id="haPaletteAurora" class="btn control-btn palette-btn preset-money" style="background:linear-gradient(100deg,#37dc6e 0%,#7affaa 46%,#9b50ff 54%,#d565ff 100%);color:#fff;text-shadow:0 1px 3px #000;border-color:rgba(255,255,255,.38)" onclick="haSetLampPalette('aurora')">AURORA</button>
-      <button id="haPaletteCyberOrchid" class="btn control-btn palette-btn preset-cool" style="background:linear-gradient(100deg,#00dcff 0%,#66f5ff 46%,#e641ff 54%,#ff86f7 100%);color:#07111f;text-shadow:0 1px 2px rgba(255,255,255,.35);border-color:rgba(255,255,255,.45)" onclick="haSetLampPalette('cyber_orchid')">CYBER ORCHID</button>
-      <button id="haPaletteEmberForest" class="btn control-btn palette-btn preset-warm" style="background:linear-gradient(100deg,#ff5624 0%,#ffb13a 46%,#23be5f 54%,#84ff9a 100%);color:#fff;text-shadow:0 1px 3px #000;border-color:rgba(255,255,255,.38)" onclick="haSetLampPalette('ember_forest')">EMBER FOREST</button>
-      <button id="haPaletteMoonGrove" class="btn control-btn palette-btn preset-money" style="background:linear-gradient(100deg,#5fb4ff 0%,#b8e4ff 46%,#55eb91 54%,#b8ffce 100%);color:#07111f;text-shadow:0 1px 2px rgba(255,255,255,.35);border-color:rgba(255,255,255,.45)" onclick="haSetLampPalette('moon_grove')">MOON GROVE</button>
-    </div>
-    <div class="head-palette-row" style="margin-top:8px;">
-      <button id="haPaletteCool" class="btn control-btn palette-btn preset-cool" style="background:linear-gradient(100deg,#305cff,#50d8ff);color:#fff;text-shadow:0 1px 3px #000" onclick="haSetLampPalette('cool')">COOL</button>
-      <button id="haPaletteWarm" class="btn control-btn palette-btn preset-warm" style="background:linear-gradient(100deg,#ff4b1f,#ffb43a);color:#fff;text-shadow:0 1px 3px #000" onclick="haSetLampPalette('warm')">WARM</button>
-      <button id="haPaletteMoney" class="btn control-btn palette-btn preset-money" style="background:linear-gradient(100deg,#1b9d45,#84ff9a);color:#07111f;text-shadow:0 1px 2px rgba(255,255,255,.35)" onclick="haSetLampPalette('money')">MONEY</button>
-      <button id="haPaletteCandle" class="btn control-btn palette-btn preset-candle" style="background:linear-gradient(100deg,#7a2f12,#ff9e3d,#ffd28a);color:#fff;text-shadow:0 1px 3px #000" onclick="haSetLampPalette('candle')">CANDLE</button>
+    <div class="head-palette-row palette-rail" aria-label="Lamp color presets" style="margin-top:12px;">
+      <button id="haPaletteCool" class="btn control-btn palette-btn preset-cool palette-cool" onclick="haSetLampPalette('cool')">COOL</button>
+      <button id="haPaletteMoney" class="btn control-btn palette-btn preset-money palette-money" onclick="haSetLampPalette('money')">MONEY</button>
+      <button id="haPaletteWarm" class="btn control-btn palette-btn preset-warm palette-warm" onclick="haSetLampPalette('warm')">WARM</button>
+      <button id="haPaletteCandle" class="btn control-btn palette-btn preset-candle palette-candle" onclick="haSetLampPalette('candle')">CANDLE</button>
+      <button id="haPaletteMiamiVice" class="btn control-btn palette-btn palette-miami-vice" onclick="haSetLampPalette('miami_vice')">MIAMI VICE</button>
+      <button id="haPaletteTokyoNight" class="btn control-btn palette-btn palette-tokyo-night" onclick="haSetLampPalette('tokyo_night')">TOKYO NIGHT</button>
+      <button id="haPaletteDeepOcean" class="btn control-btn palette-btn palette-deep-ocean" onclick="haSetLampPalette('deep_ocean')">DEEP OCEAN</button>
+      <button id="haPaletteGoldenHour" class="btn control-btn palette-btn palette-golden-hour" onclick="haSetLampPalette('golden_hour')">GOLDEN HOUR</button>
+      <button id="haPaletteJadeTemple" class="btn control-btn palette-btn palette-jade-temple" onclick="haSetLampPalette('jade_temple')">JADE TEMPLE</button>
+      <button id="haPaletteIceFire" class="btn control-btn palette-btn palette-ice-fire" onclick="haSetLampPalette('ice_fire')">ICE/FIRE</button>
+      <button id="haPaletteAurora" class="btn control-btn palette-btn palette-aurora" onclick="haSetLampPalette('aurora')">AURORA</button>
+      <button id="haPaletteCyberOrchid" class="btn control-btn palette-btn palette-cyber-orchid" onclick="haSetLampPalette('cyber_orchid')">CYBER ORCHID</button>
+      <button id="haPaletteEmberForest" class="btn control-btn palette-btn palette-ember-forest" onclick="haSetLampPalette('ember_forest')">EMBER FOREST</button>
+      <button id="haPaletteMoonGrove" class="btn control-btn palette-btn palette-moon-grove" onclick="haSetLampPalette('moon_grove')">MOON GROVE</button>
     </div>
     <div id="haLampPaletteMsg" class="small muted" style="margin-top:8px;"></div>
     <div id="haLampPaletteLast" class="small muted" style="margin-top:4px;"></div>
@@ -972,7 +980,7 @@ async function haRefreshStatus() {
 
     // Palette active state
     const activePalette = String(st.lamp_palette_last || '').toLowerCase();
-    ['cool','money','warm','candle','ice_fire','aurora','cyber_orchid','ember_forest','moon_grove'].forEach(p => {
+    ['cool','money','warm','candle','miami_vice','tokyo_night','deep_ocean','golden_hour','jade_temple','ice_fire','aurora','cyber_orchid','ember_forest','moon_grove'].forEach(p => {
       const btn = document.getElementById('haPalette' + p.split('_').map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(''));
       if (btn) btn.classList.toggle('is-active', activePalette === p);
     });

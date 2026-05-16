@@ -526,6 +526,11 @@ function masterSetPaletteState(activePalette) {
     ['headPaletteMoney', 'money'],
     ['headPaletteWarm', 'warm'],
     ['headPaletteCandle', 'candle'],
+    ['headPaletteMiamiVice', 'miami_vice'],
+    ['headPaletteTokyoNight', 'tokyo_night'],
+    ['headPaletteDeepOcean', 'deep_ocean'],
+    ['headPaletteGoldenHour', 'golden_hour'],
+    ['headPaletteJadeTemple', 'jade_temple'],
     ['headPaletteIceFire', 'ice_fire'],
     ['headPaletteAurora', 'aurora'],
     ['headPaletteCyberOrchid', 'cyber_orchid'],
@@ -1763,21 +1768,31 @@ def create_app(plugins: list[Any]) -> Flask:
       display: flex;
       align-items: center;
       gap: 6px;
-      flex-wrap: wrap;
-      max-width: 860px;
+      flex-wrap: nowrap;
+      max-width: min(100%, 1040px);
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 2px 4px 7px 1px;
+      scroll-snap-type: x proximity;
+      scrollbar-width: thin;
+      -webkit-overflow-scrolling: touch;
     }
     .head-palette-row .btn.is-active {
       border-color: rgba(255, 255, 255, 0.58);
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset, 0 0 18px rgba(139, 165, 255, 0.18);
     }
-    .head-palette-row .preset-btn {
-      min-width: 82px;
+    .head-palette-row .preset-btn,
+    .head-palette-row .palette-btn {
+      min-width: 92px;
+      flex: 0 0 auto;
+      scroll-snap-align: start;
       color: #fff;
       text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
       border-color: rgba(255, 255, 255, 0.26);
       box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
     }
-    .head-palette-row .preset-btn:hover {
+    .head-palette-row .preset-btn:hover,
+    .head-palette-row .palette-btn:hover {
       transform: translateY(-1px);
       border-color: rgba(255, 255, 255, 0.48);
       box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
@@ -1791,6 +1806,11 @@ def create_app(plugins: list[Any]) -> Flask:
     .head-palette-row .palette-cyber-orchid { background: linear-gradient(100deg,#00dcff 0%,#66f5ff 46%,#e641ff 54%,#ff86f7 100%); color: #07111f; text-shadow: 0 1px 2px rgba(255,255,255,.35); }
     .head-palette-row .palette-ember-forest { background: linear-gradient(100deg,#ff8a24 0%,#ffd166 46%,#2bc96f 54%,#7affaa 100%); }
     .head-palette-row .palette-moon-grove { background: linear-gradient(100deg,#496dff 0%,#89a7ff 46%,#1fbd73 54%,#8df0b1 100%); }
+    .head-palette-row .palette-miami-vice { background: linear-gradient(100deg,#ff3fa4 0%,#ff73c5 46%,#00d9ff 54%,#64f2ff 100%); }
+    .head-palette-row .palette-tokyo-night { background: linear-gradient(100deg,#3b4dff 0%,#6b78ff 46%,#c43cff 54%,#ec7aff 100%); }
+    .head-palette-row .palette-deep-ocean { background: linear-gradient(100deg,#00bfa6 0%,#4be7d2 46%,#245cff 54%,#6c8eff 100%); }
+    .head-palette-row .palette-golden-hour { background: linear-gradient(100deg,#ffb347 0%,#ffd07a 46%,#ff7a59 54%,#ff9d82 100%); color: #2b1608; text-shadow: 0 1px 2px rgba(255,255,255,.35); }
+    .head-palette-row .palette-jade-temple { background: linear-gradient(100deg,#00c986 0%,#58e6b0 46%,#fff0b8 54%,#fff7d8 100%); color: #062019; text-shadow: 0 1px 2px rgba(255,255,255,.35); }
     .layout {
       display: grid;
       grid-template-columns: 300px minmax(0, 1fr);
@@ -2503,7 +2523,7 @@ def create_app(plugins: list[Any]) -> Flask:
       .head-quick-btn { min-height: 40px; }
     }
   </style>
-  <link rel="stylesheet" href="/static/delight.css?v=mobile-compact-20260515">
+  <link rel="stylesheet" href="/static/delight.css?v=palette-rail-20260515">
 </head>
 <body>
 <div class=\"toast-container\" id=\"toastContainer\"></div>
@@ -2523,16 +2543,21 @@ def create_app(plugins: list[Any]) -> Flask:
       </div>
       <div class=\"head-quick-group head-quick-group-palette\">
         <span class=\"head-quick-label\"><span class=\"material-symbols-rounded label-icon\">palette</span>Lamp Colors</span>
-        <div class=\"head-palette-row\">
+        <div class=\"head-palette-row palette-rail\" aria-label=\"Lamp color presets\">
           <button id=\"headPaletteCool\" class=\"btn head-quick-btn preset-btn palette-cool\" onclick=\"masterSetHaLampPalette('cool')\">COOL</button>
           <button id=\"headPaletteMoney\" class=\"btn head-quick-btn preset-btn palette-money\" onclick=\"masterSetHaLampPalette('money')\">MONEY</button>
+          <button id=\"headPaletteMiamiVice\" class=\"btn head-quick-btn preset-btn palette-miami-vice\" onclick=\"masterSetHaLampPalette('miami_vice')\">MIAMI</button>
+          <button id=\"headPaletteTokyoNight\" class=\"btn head-quick-btn preset-btn palette-tokyo-night\" onclick=\"masterSetHaLampPalette('tokyo_night')\">TOKYO</button>
+          <button id=\"headPaletteDeepOcean\" class=\"btn head-quick-btn preset-btn palette-deep-ocean\" onclick=\"masterSetHaLampPalette('deep_ocean')\">OCEAN</button>
+          <button id=\"headPaletteGoldenHour\" class=\"btn head-quick-btn preset-btn palette-golden-hour\" onclick=\"masterSetHaLampPalette('golden_hour')\">GOLDEN</button>
+          <button id=\"headPaletteJadeTemple\" class=\"btn head-quick-btn preset-btn palette-jade-temple\" onclick=\"masterSetHaLampPalette('jade_temple')\">JADE</button>
           <button id=\"headPaletteWarm\" class=\"btn head-quick-btn preset-btn palette-warm\" onclick=\"masterSetHaLampPalette('warm')\">WARM</button>
           <button id=\"headPaletteCandle\" class=\"btn head-quick-btn preset-btn palette-candle\" onclick=\"masterSetHaLampPalette('candle')\">CANDLE</button>
           <button id=\"headPaletteIceFire\" class=\"btn head-quick-btn preset-btn palette-ice-fire\" onclick=\"masterSetHaLampPalette('ice_fire')\">ICE/FIRE</button>
           <button id=\"headPaletteAurora\" class=\"btn head-quick-btn preset-btn palette-aurora\" onclick=\"masterSetHaLampPalette('aurora')\">AURORA</button>
-          <button id=\"headPaletteCyberOrchid\" class=\"btn head-quick-btn preset-btn palette-cyber-orchid\" onclick=\"masterSetHaLampPalette('cyber_orchid')\">CYBER ORCHID</button>
-          <button id=\"headPaletteEmberForest\" class=\"btn head-quick-btn preset-btn palette-ember-forest\" onclick=\"masterSetHaLampPalette('ember_forest')\">EMBER FOREST</button>
-          <button id=\"headPaletteMoonGrove\" class=\"btn head-quick-btn preset-btn palette-moon-grove\" onclick=\"masterSetHaLampPalette('moon_grove')\">MOON GROVE</button>
+          <button id=\"headPaletteCyberOrchid\" class=\"btn head-quick-btn preset-btn palette-cyber-orchid\" onclick=\"masterSetHaLampPalette('cyber_orchid')\">CYBER</button>
+          <button id=\"headPaletteEmberForest\" class=\"btn head-quick-btn preset-btn palette-ember-forest\" onclick=\"masterSetHaLampPalette('ember_forest')\">EMBER</button>
+          <button id=\"headPaletteMoonGrove\" class=\"btn head-quick-btn preset-btn palette-moon-grove\" onclick=\"masterSetHaLampPalette('moon_grove')\">MOON</button>
         </div>
       </div>
     </div>
@@ -2550,7 +2575,7 @@ def create_app(plugins: list[Any]) -> Flask:
   </div>
 </div>
 
-<script src="/static/delight.js"></script>
+<script src="/static/delight.js?v=palette-rail-20260515"></script>
 <script>
 async function api(path, opts={}) {
   const r = await fetch(path, opts);
