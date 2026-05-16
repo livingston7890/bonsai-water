@@ -529,8 +529,6 @@ function masterSetPaletteState(activePalette) {
     ['headPaletteMiamiVice', 'miami_vice'],
     ['headPaletteTokyoNight', 'tokyo_night'],
     ['headPaletteDeepOcean', 'deep_ocean'],
-    ['headPaletteGoldenHour', 'golden_hour'],
-    ['headPaletteJadeTemple', 'jade_temple'],
     ['headPaletteIceFire', 'ice_fire'],
     ['headPaletteAurora', 'aurora'],
     ['headPaletteCyberOrchid', 'cyber_orchid'],
@@ -1809,8 +1807,6 @@ def create_app(plugins: list[Any]) -> Flask:
     .head-palette-row .palette-miami-vice { background: linear-gradient(100deg,#ff3fa4 0%,#ff73c5 46%,#00d9ff 54%,#64f2ff 100%); }
     .head-palette-row .palette-tokyo-night { background: linear-gradient(100deg,#3b4dff 0%,#6b78ff 46%,#c43cff 54%,#ec7aff 100%); }
     .head-palette-row .palette-deep-ocean { background: linear-gradient(100deg,#00bfa6 0%,#4be7d2 46%,#245cff 54%,#6c8eff 100%); }
-    .head-palette-row .palette-golden-hour { background: linear-gradient(100deg,#ffb347 0%,#ffd07a 46%,#ff7a59 54%,#ff9d82 100%); color: #2b1608; text-shadow: 0 1px 2px rgba(255,255,255,.35); }
-    .head-palette-row .palette-jade-temple { background: linear-gradient(100deg,#177f46 0%,#35b866 46%,#b98b36 54%,#dfb45b 100%); color: #f7fff0; text-shadow: 0 1px 2px rgba(0,0,0,.42); }
     .layout {
       display: grid;
       grid-template-columns: 300px minmax(0, 1fr);
@@ -2523,7 +2519,7 @@ def create_app(plugins: list[Any]) -> Flask:
       .head-quick-btn { min-height: 40px; }
     }
   </style>
-  <link rel="stylesheet" href="/static/delight.css?v=jade-brass-20260516">
+  <link rel="stylesheet" href="/static/delight.css?v=palette-trim-20260516">
 </head>
 <body>
 <div class=\"toast-container\" id=\"toastContainer\"></div>
@@ -2549,8 +2545,6 @@ def create_app(plugins: list[Any]) -> Flask:
           <button id=\"headPaletteMiamiVice\" class=\"btn head-quick-btn preset-btn palette-miami-vice\" onclick=\"masterSetHaLampPalette('miami_vice')\">MIAMI</button>
           <button id=\"headPaletteTokyoNight\" class=\"btn head-quick-btn preset-btn palette-tokyo-night\" onclick=\"masterSetHaLampPalette('tokyo_night')\">TOKYO</button>
           <button id=\"headPaletteDeepOcean\" class=\"btn head-quick-btn preset-btn palette-deep-ocean\" onclick=\"masterSetHaLampPalette('deep_ocean')\">OCEAN</button>
-          <button id=\"headPaletteGoldenHour\" class=\"btn head-quick-btn preset-btn palette-golden-hour\" onclick=\"masterSetHaLampPalette('golden_hour')\">GOLDEN</button>
-          <button id=\"headPaletteJadeTemple\" class=\"btn head-quick-btn preset-btn palette-jade-temple\" onclick=\"masterSetHaLampPalette('jade_temple')\">JADE</button>
           <button id=\"headPaletteWarm\" class=\"btn head-quick-btn preset-btn palette-warm\" onclick=\"masterSetHaLampPalette('warm')\">WARM</button>
           <button id=\"headPaletteCandle\" class=\"btn head-quick-btn preset-btn palette-candle\" onclick=\"masterSetHaLampPalette('candle')\">CANDLE</button>
           <button id=\"headPaletteIceFire\" class=\"btn head-quick-btn preset-btn palette-ice-fire\" onclick=\"masterSetHaLampPalette('ice_fire')\">ICE/FIRE</button>
@@ -2575,7 +2569,7 @@ def create_app(plugins: list[Any]) -> Flask:
   </div>
 </div>
 
-<script src="/static/delight.js?v=jade-brass-20260516"></script>
+<script src="/static/delight.js?v=palette-trim-20260516"></script>
 <script>
 async function api(path, opts={}) {
   const r = await fetch(path, opts);

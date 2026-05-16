@@ -36,8 +36,6 @@ LAMP_PALETTES = {
     "miami_vice": {"label": "Miami Vice", "mode": "split", "left_rgb": (255, 63, 164), "right_rgb": (0, 217, 255)},
     "tokyo_night": {"label": "Tokyo Night", "mode": "split", "left_rgb": (59, 77, 255), "right_rgb": (196, 60, 255)},
     "deep_ocean": {"label": "Deep Ocean", "mode": "split", "left_rgb": (0, 191, 166), "right_rgb": (36, 92, 255)},
-    "golden_hour": {"label": "Golden Hour", "mode": "split", "left_rgb": (255, 179, 71), "right_rgb": (255, 122, 89)},
-    "jade_temple": {"label": "Jade Temple", "mode": "split", "left_rgb": (23, 130, 70), "right_rgb": (185, 139, 54)},
 }
 
 LIGHT_COMMAND_RETRIES = 2
@@ -795,8 +793,6 @@ class HomeAssistantPlugin:
       <button id="haPaletteMiamiVice" class="btn control-btn palette-btn palette-miami-vice" onclick="haSetLampPalette('miami_vice')">MIAMI VICE</button>
       <button id="haPaletteTokyoNight" class="btn control-btn palette-btn palette-tokyo-night" onclick="haSetLampPalette('tokyo_night')">TOKYO NIGHT</button>
       <button id="haPaletteDeepOcean" class="btn control-btn palette-btn palette-deep-ocean" onclick="haSetLampPalette('deep_ocean')">DEEP OCEAN</button>
-      <button id="haPaletteGoldenHour" class="btn control-btn palette-btn palette-golden-hour" onclick="haSetLampPalette('golden_hour')">GOLDEN HOUR</button>
-      <button id="haPaletteJadeTemple" class="btn control-btn palette-btn palette-jade-temple" onclick="haSetLampPalette('jade_temple')">JADE TEMPLE</button>
       <button id="haPaletteIceFire" class="btn control-btn palette-btn palette-ice-fire" onclick="haSetLampPalette('ice_fire')">ICE/FIRE</button>
       <button id="haPaletteAurora" class="btn control-btn palette-btn palette-aurora" onclick="haSetLampPalette('aurora')">AURORA</button>
       <button id="haPaletteCyberOrchid" class="btn control-btn palette-btn palette-cyber-orchid" onclick="haSetLampPalette('cyber_orchid')">CYBER ORCHID</button>
@@ -980,7 +976,7 @@ async function haRefreshStatus() {
 
     // Palette active state
     const activePalette = String(st.lamp_palette_last || '').toLowerCase();
-    ['cool','money','warm','candle','miami_vice','tokyo_night','deep_ocean','golden_hour','jade_temple','ice_fire','aurora','cyber_orchid','ember_forest','moon_grove'].forEach(p => {
+    ['cool','money','warm','candle','miami_vice','tokyo_night','deep_ocean','ice_fire','aurora','cyber_orchid','ember_forest','moon_grove'].forEach(p => {
       const btn = document.getElementById('haPalette' + p.split('_').map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(''));
       if (btn) btn.classList.toggle('is-active', activePalette === p);
     });

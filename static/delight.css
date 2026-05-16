@@ -325,8 +325,6 @@ input[type=range].dimmer-slider::-webkit-slider-thumb:hover {
 .palette-btn.palette-miami-vice.is-active { --palette-glow: rgba(255,63,164,0.34); border-color: rgba(255,125,202,0.74); }
 .palette-btn.palette-tokyo-night.is-active { --palette-glow: rgba(150,70,255,0.34); border-color: rgba(196,120,255,0.74); }
 .palette-btn.palette-deep-ocean.is-active { --palette-glow: rgba(0,191,166,0.32); border-color: rgba(60,220,210,0.74); }
-.palette-btn.palette-golden-hour.is-active { --palette-glow: rgba(255,179,71,0.34); border-color: rgba(255,205,120,0.76); }
-.palette-btn.palette-jade-temple.is-active { --palette-glow: rgba(23,130,70,0.34); border-color: rgba(223,180,91,0.76); }
 
 .head-quick-group-palette {
   overflow: hidden;

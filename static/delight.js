@@ -247,8 +247,6 @@ const PALETTE_GLOWS = {
   miami_vice: 'rgba(255,63,164,0.22)',
   tokyo_night: 'rgba(150,70,255,0.22)',
   deep_ocean: 'rgba(0,191,166,0.2)',
-  golden_hour: 'rgba(255,179,71,0.2)',
-  jade_temple: 'rgba(23,130,70,0.18)',
 };
 
 function setAmbientGlow(palette) {

@@ -62,8 +62,6 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec("palette_miami_vice", ("miami vice", "miami-vice", "vice", "pink cyan"), "apply Miami Vice: hot pink and cyan", mutates=True),
     CommandSpec("palette_tokyo_night", ("tokyo night", "tokyo-night", "tokyo", "indigo magenta"), "apply Tokyo Night: indigo and magenta", mutates=True),
     CommandSpec("palette_deep_ocean", ("deep ocean", "deep-ocean", "ocean", "teal blue"), "apply Deep Ocean: teal and royal blue", mutates=True),
-    CommandSpec("palette_golden_hour", ("golden hour", "golden-hour", "golden", "amber peach"), "apply Golden Hour: amber and peach", mutates=True),
-    CommandSpec("palette_jade_temple", ("jade temple", "jade-temple", "jade", "green brass"), "apply Jade Temple: deep jade and warm brass", mutates=True),
     CommandSpec("pump_on", ("pump on", "start pump", "manual pump on"), "start one bounded manual pump run", mutates=True),
     CommandSpec("pump_off", ("pump off", "stop pump", "manual pump off"), "stop manual/active pump run", mutates=True),
     CommandSpec("pihole", ("pihole", "dns"), "Pi-hole blocking/metrics summary"),
@@ -402,9 +400,9 @@ def set_shop_open(open_shop: bool) -> str:
 
 def set_lamp_palette(palette: str) -> str:
     palette_name = str(palette).strip().lower()
-    allowed = {"cool", "warm", "money", "candle", "ice_fire", "aurora", "cyber_orchid", "ember_forest", "moon_grove", "miami_vice", "tokyo_night", "deep_ocean", "golden_hour", "jade_temple"}
+    allowed = {"cool", "warm", "money", "candle", "ice_fire", "aurora", "cyber_orchid", "ember_forest", "moon_grove", "miami_vice", "tokyo_night", "deep_ocean"}
     if palette_name not in allowed:
-        raise OpsError("Palette must be one of: cool, warm, money, candle, ice_fire, aurora, cyber_orchid, ember_forest, moon_grove, miami_vice, tokyo_night, deep_ocean, golden_hour, jade_temple.")
+        raise OpsError("Palette must be one of: cool, warm, money, candle, ice_fire, aurora, cyber_orchid, ember_forest, moon_grove, miami_vice, tokyo_night, deep_ocean.")
     result = _json_request("/api/ha/lamp_palette", method="POST", payload={"palette": palette_name})
     raw_status = result.get("ha_status")
     status = raw_status if isinstance(raw_status, dict) else _safe_request("/api/ha/status")
@@ -577,10 +575,6 @@ def apply_command(text: str) -> str:
         return set_lamp_palette("tokyo_night")
     if command == "palette_deep_ocean":
         return set_lamp_palette("deep_ocean")
-    if command == "palette_golden_hour":
-        return set_lamp_palette("golden_hour")
-    if command == "palette_jade_temple":
-        return set_lamp_palette("jade_temple")
     if command == "pump_on":
         return set_pump(True)
     if command == "pump_off":

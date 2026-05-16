@@ -31,8 +31,8 @@ class BonsaiOpsTests(TestCase):
         self.assertEqual(bonsai_ops.classify_command("miami vice"), "palette_miami_vice")
         self.assertEqual(bonsai_ops.classify_command("tokyo night"), "palette_tokyo_night")
         self.assertEqual(bonsai_ops.classify_command("deep ocean"), "palette_deep_ocean")
-        self.assertEqual(bonsai_ops.classify_command("golden hour"), "palette_golden_hour")
-        self.assertEqual(bonsai_ops.classify_command("jade temple"), "palette_jade_temple")
+        self.assertIsNone(bonsai_ops.classify_command("golden hour"))
+        self.assertIsNone(bonsai_ops.classify_command("jade temple"))
         self.assertEqual(bonsai_ops.classify_command("pump off"), "pump_off")
         self.assertEqual(bonsai_ops.classify_command("deploy hub confirm"), "deploy_hub")
         self.assertIsNone(bonsai_ops.classify_command("deploy hub"))
@@ -187,21 +187,18 @@ class BonsaiOpsTests(TestCase):
             money_msg = bonsai_ops.apply_command("money")
             candle_msg = bonsai_ops.apply_command("candle lamps")
             miami_msg = bonsai_ops.apply_command("miami vice")
-            jade_msg = bonsai_ops.apply_command("jade temple")
 
         self.assertIn("Cool lights", cool_msg)
         self.assertIn("Warm lights", warm_msg)
         self.assertIn("Money lights", money_msg)
         self.assertIn("Candle lights", candle_msg)
         self.assertIn("Miami Vice lights", miami_msg)
-        self.assertIn("Jade Temple lights", jade_msg)
         self.assertEqual(calls, [
             ("/api/ha/lamp_palette", "POST", {"palette": "cool"}),
             ("/api/ha/lamp_palette", "POST", {"palette": "warm"}),
             ("/api/ha/lamp_palette", "POST", {"palette": "money"}),
             ("/api/ha/lamp_palette", "POST", {"palette": "candle"}),
             ("/api/ha/lamp_palette", "POST", {"palette": "miami_vice"}),
-            ("/api/ha/lamp_palette", "POST", {"palette": "jade_temple"}),
         ])
 
     def test_reboot_requires_configured_ssh_target(self):
