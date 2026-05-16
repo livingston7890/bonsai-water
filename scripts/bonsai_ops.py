@@ -63,7 +63,7 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec("palette_tokyo_night", ("tokyo night", "tokyo-night", "tokyo", "indigo magenta"), "apply Tokyo Night: indigo and magenta", mutates=True),
     CommandSpec("palette_deep_ocean", ("deep ocean", "deep-ocean", "ocean", "teal blue"), "apply Deep Ocean: teal and royal blue", mutates=True),
     CommandSpec("palette_golden_hour", ("golden hour", "golden-hour", "golden", "amber peach"), "apply Golden Hour: amber and peach", mutates=True),
-    CommandSpec("palette_jade_temple", ("jade temple", "jade-temple", "jade", "green ivory"), "apply Jade Temple: jade and ivory", mutates=True),
+    CommandSpec("palette_jade_temple", ("jade temple", "jade-temple", "jade", "green brass"), "apply Jade Temple: deep jade and warm brass", mutates=True),
     CommandSpec("pump_on", ("pump on", "start pump", "manual pump on"), "start one bounded manual pump run", mutates=True),
     CommandSpec("pump_off", ("pump off", "stop pump", "manual pump off"), "stop manual/active pump run", mutates=True),
     CommandSpec("pihole", ("pihole", "dns"), "Pi-hole blocking/metrics summary"),

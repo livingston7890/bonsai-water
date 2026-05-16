@@ -1810,7 +1810,7 @@ def create_app(plugins: list[Any]) -> Flask:
     .head-palette-row .palette-tokyo-night { background: linear-gradient(100deg,#3b4dff 0%,#6b78ff 46%,#c43cff 54%,#ec7aff 100%); }
     .head-palette-row .palette-deep-ocean { background: linear-gradient(100deg,#00bfa6 0%,#4be7d2 46%,#245cff 54%,#6c8eff 100%); }
     .head-palette-row .palette-golden-hour { background: linear-gradient(100deg,#ffb347 0%,#ffd07a 46%,#ff7a59 54%,#ff9d82 100%); color: #2b1608; text-shadow: 0 1px 2px rgba(255,255,255,.35); }
-    .head-palette-row .palette-jade-temple { background: linear-gradient(100deg,#00c986 0%,#58e6b0 46%,#fff0b8 54%,#fff7d8 100%); color: #062019; text-shadow: 0 1px 2px rgba(255,255,255,.35); }
+    .head-palette-row .palette-jade-temple { background: linear-gradient(100deg,#177f46 0%,#35b866 46%,#b98b36 54%,#dfb45b 100%); color: #f7fff0; text-shadow: 0 1px 2px rgba(0,0,0,.42); }
     .layout {
       display: grid;
       grid-template-columns: 300px minmax(0, 1fr);
@@ -2523,7 +2523,7 @@ def create_app(plugins: list[Any]) -> Flask:
       .head-quick-btn { min-height: 40px; }
     }
   </style>
-  <link rel="stylesheet" href="/static/delight.css?v=palette-stack-20260515">
+  <link rel="stylesheet" href="/static/delight.css?v=jade-brass-20260516">
 </head>
 <body>
 <div class=\"toast-container\" id=\"toastContainer\"></div>
@@ -2575,7 +2575,7 @@ def create_app(plugins: list[Any]) -> Flask:
   </div>
 </div>
 
-<script src="/static/delight.js?v=palette-rail-20260515"></script>
+<script src="/static/delight.js?v=jade-brass-20260516"></script>
 <script>
 async function api(path, opts={}) {
   const r = await fetch(path, opts);

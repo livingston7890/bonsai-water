@@ -138,6 +138,17 @@ class HomeAssistantLampControlTests(TestCase):
         self.assertEqual(calls[1][:3], ("light", "turn_on", "light.right"))
         self.assertEqual(calls[1][3]["rgb_color"], [0, 217, 255])
 
+        calls.clear()
+        ok, message = plugin.set_lamp_palette("jade temple")
+
+        self.assertTrue(ok)
+        self.assertIn("Jade Temple palette", message)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][:3], ("light", "turn_on", "light.left"))
+        self.assertEqual(calls[0][3]["rgb_color"], [23, 130, 70])
+        self.assertEqual(calls[1][:3], ("light", "turn_on", "light.right"))
+        self.assertEqual(calls[1][3]["rgb_color"], [185, 139, 54])
+
     def test_palette_catalog_ui_uses_compact_stacked_rail(self):
         html = self.make_plugin().dashboard_html()
         css = (ROOT / "static" / "delight.css").read_text()

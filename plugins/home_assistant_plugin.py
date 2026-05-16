@@ -37,7 +37,7 @@ LAMP_PALETTES = {
     "tokyo_night": {"label": "Tokyo Night", "mode": "split", "left_rgb": (59, 77, 255), "right_rgb": (196, 60, 255)},
     "deep_ocean": {"label": "Deep Ocean", "mode": "split", "left_rgb": (0, 191, 166), "right_rgb": (36, 92, 255)},
     "golden_hour": {"label": "Golden Hour", "mode": "split", "left_rgb": (255, 179, 71), "right_rgb": (255, 122, 89)},
-    "jade_temple": {"label": "Jade Temple", "mode": "split", "left_rgb": (0, 201, 134), "right_rgb": (255, 240, 184)},
+    "jade_temple": {"label": "Jade Temple", "mode": "split", "left_rgb": (23, 130, 70), "right_rgb": (185, 139, 54)},
 }
 
 LIGHT_COMMAND_RETRIES = 2
