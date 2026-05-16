@@ -331,6 +331,9 @@ class HomeAssistantPlugin:
         speaker_right_entity = str(self.config.get("ha_speaker_right_entity", "")).strip()
         lamp_left_entity = str(self.config.get("ha_lamp_left_entity", "")).strip()
         lamp_right_entity = str(self.config.get("ha_lamp_right_entity", "")).strip()
+        lamp_palette_last = str(self.config.get("ha_lamp_palette_last", "")).strip()
+        if lamp_palette_last not in LAMP_PALETTES:
+            lamp_palette_last = ""
 
         # Backward compatibility with earlier single-light config.
         if not lamp_left_entity and not lamp_right_entity and light_entity:
@@ -354,7 +357,7 @@ class HomeAssistantPlugin:
             "speaker_right_state": "n/a",
             "lamp_left_state": "n/a",
             "lamp_right_state": "n/a",
-            "lamp_palette_last": str(self.config.get("ha_lamp_palette_last", "")).strip(),
+            "lamp_palette_last": lamp_palette_last,
             "lamp_brightness_last": self._clamp_brightness(self.config.get("ha_lamp_brightness_last", 80)),
             "lamp_primary_entity": "",
             "lamp_effect_current": "",

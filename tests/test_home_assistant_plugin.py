@@ -85,6 +85,13 @@ class HomeAssistantLampControlTests(TestCase):
             {"brightness_pct": 33, "transition": 0},
         ))
 
+    def test_removed_palette_last_is_hidden_from_status(self):
+        plugin = self.make_plugin()
+        plugin.config["ha_base_url"] = ""
+        plugin.config["ha_lamp_palette_last"] = "golden_hour"
+
+        self.assertEqual(plugin.get_status()["lamp_palette_last"], "")
+
     def test_set_speakers_sends_one_group_switch_call(self):
         plugin = self.make_plugin()
         calls = []
