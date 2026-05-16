@@ -1566,11 +1566,7 @@ def create_app(plugins: list[Any]) -> Flask:
 <html data-theme=\"dark\">
 <head>
   <meta charset=\"utf-8\">
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">
-  <meta name=\"theme-color\" content=\"#0f141f\">
-  <meta name=\"apple-mobile-web-app-capable\" content=\"yes\">
-  <meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">
-  <meta name=\"apple-mobile-web-app-title\" content=\"Pi Hub\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
   <title>Pi Control Hub</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0&display=swap');
@@ -2463,106 +2459,16 @@ def create_app(plugins: list[Any]) -> Flask:
       .master-col-hero { order: -1; }
     }
     @media (max-width: 640px) {
-      body { min-height: 100svh; }
-      .wrap {
-        padding: calc(14px + env(safe-area-inset-top)) 12px calc(92px + env(safe-area-inset-bottom));
-      }
-      .app-head {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
-        border-radius: 18px;
-        padding: 14px;
-      }
-      .title { font-size: 28px; }
+      .wrap { padding: 18px 14px 28px; }
+      .app-head { flex-direction: column; }
+      .title { font-size: 30px; }
       .head-brand,
       .head-quickbar { width: 100%; }
-      .head-quickbar {
-        justify-content: stretch;
-        gap: 10px;
-      }
-      .head-quick-group {
-        width: 100%;
-        min-width: 0;
-      }
-      .head-quick-group-shop,
-      .head-quick-group-power,
+      .head-quick-group { width: 100%; }
+      .head-quick-group-shop { flex-basis: 100%; }
       .head-quick-group-palette { flex-basis: 100%; }
-      .head-quick-group-power {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-      .head-quick-group-power .head-quick-label { grid-column: 1 / -1; }
       .head-quick-label { min-width: 100%; }
-      .head-shop-btn,
-      .head-quick-group-shop .head-quick-btn,
-      .head-quick-group-power .head-quick-btn {
-        width: 100%;
-        min-width: 0;
-      }
-      .head-palette-row {
-        width: 100%;
-        max-width: none;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        padding: 2px 2px 8px;
-        scroll-snap-type: x proximity;
-        -webkit-overflow-scrolling: touch;
-      }
-      .head-palette-row .preset-btn {
-        flex: 0 0 auto;
-        min-width: 96px;
-        scroll-snap-align: start;
-      }
-      .layout {
-        grid-template-columns: 1fr;
-        padding-bottom: calc(10px + env(safe-area-inset-bottom));
-      }
-      .sidebar {
-        position: fixed;
-        left: 10px;
-        right: 10px;
-        bottom: calc(8px + env(safe-area-inset-bottom));
-        z-index: 40;
-        display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 6px;
-        padding: 7px;
-        border-radius: 18px;
-      }
-      .side-head { display: none; }
-      .side-link {
-        width: auto;
-        min-width: 0;
-        margin: 0;
-        padding: 7px 4px;
-        text-align: center;
-      }
-      .side-link-top {
-        flex-direction: column;
-        gap: 4px;
-        margin: 0;
-      }
-      .module-icon {
-        width: 28px;
-        height: 28px;
-        font-size: 18px;
-      }
-      .module-name {
-        max-width: 100%;
-        font-size: 11px;
-        line-height: 1.1;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .module-tag,
-      .module-hint { display: none; }
-      .card {
-        border-radius: 18px;
-        padding: 14px;
-      }
+      .side-link { min-width: 100%; width: 100%; }
       .btn {
         min-height: 44px;
         padding: 10px 12px;
@@ -2578,8 +2484,6 @@ def create_app(plugins: list[Any]) -> Flask:
       }
       .kpi { font-size: 36px; }
       input.wide { width: 100%; }
-      .pane-title { font-size: 26px; }
-      .pane-subtitle { font-size: 14px; }
       .master-grid { grid-template-columns: 1fr; }
       .master-col-hero { order: -1; }
       .master-hero-block { flex-direction: column; align-items: stretch; }
@@ -2588,8 +2492,8 @@ def create_app(plugins: list[Any]) -> Flask:
       .master-item { padding: 8px 9px; }
       .master-state { min-width: 80px; font-size: 10px; }
       .master-control-label { min-width: 100%; }
-      .master-mini-btn { min-height: 44px; }
-      .head-quick-btn { min-height: 44px; }
+      .master-mini-btn { min-height: 40px; }
+      .head-quick-btn { min-height: 40px; }
     }
   </style>
   <link rel="stylesheet" href="/static/delight.css">
